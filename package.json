@@ -1,6 +1,6 @@
 {
   "name": "playwright-typescript-framework",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Playwright test automation framework in strict TypeScript: UI, API, database, accessibility and visual testing, role-based users and Allure reporting",
   "license": "MIT",
@@ -17,7 +17,7 @@
   },
   "scripts": {
     "test": "npm run clean && playwright test",
-    "test:unit": "node --import tsx --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=85 --test-coverage-include=\"config/**\" --test-coverage-include=\"utils/apiClient.ts\" --test-coverage-include=\"utils/logger.ts\" --test-coverage-include=\"utils/allureCategories.ts\" --test-coverage-include=\"utils/lintTests.ts\" --test-coverage-include=\"utils/contract.ts\" --test-coverage-include=\"utils/testData.ts\" --test-coverage-include=\"demo-app/server.ts\" \"unit/*.test.ts\"",
+    "test:unit": "node --import tsx --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=85 --test-coverage-include=\"config/**\" --test-coverage-include=\"utils/apiClient.ts\" --test-coverage-include=\"utils/logger.ts\" --test-coverage-include=\"utils/allureCategories.ts\" --test-coverage-include=\"utils/lintTests.ts\" --test-coverage-include=\"utils/contract.ts\" --test-coverage-include=\"utils/testData.ts\" --test-coverage-include=\"utils/prSummary.ts\" --test-coverage-include=\"demo-app/server.ts\" \"unit/*.test.ts\"",
     "test:visual": "tsx utils/visual.ts",
     "test:quarantine": "tsx utils/runQuarantine.ts",
     "check": "playwright test --list && npm run -s lint:tests",

@@ -12,11 +12,13 @@ Automated testing workflow that runs on every pull request to `main`, every push
 | Job | Runs on | What it does |
 |-----|---------|--------------|
 | `Checks` | PRs and pushes | ESLint and Prettier, strict type check, `npm audit --audit-level=high`, framework unit tests with coverage thresholds, test list and policy lint (allowed tags, quarantine tickets) |
-| `Tests` | PRs and pushes | Every spec, headless, with a MySQL service container for the `@db` tests. Then `@quarantine` tests in a non-blocking step, and a check that fails if any test left rows in the database. Fails if any test fails |
+| `Burn-in` | PRs only | Tests affected by the PR (`--only-changed=origin/<base>`), once and then 10 times with no retries. Needs full git history (`fetch-depth: 0`) |
+| `Tests (shard N/2)` | PRs and pushes | The suite split across machines (`--shard`), each with a MySQL service container, writing blob reports. Then `@quarantine` tests (shard 1, non-blocking) and the leftover-data check |
+| `Tests` | PRs and pushes | Merges the blob reports (HTML + JSON), writes the results summary to the job summary and as a PR comment, and fails if any shard failed |
 | `Visual` | PRs and pushes | Screenshot comparison inside the Playwright Docker image (`npm run test:visual`). Uploads expected/actual/diff images on failure |
 | `Publish Allure Report` | Pushes to `main` only | Builds the Allure report (with trend history) and deploys it to GitHub Pages |
 
-`Checks`, `Tests` and `Visual` are the required status checks for merging into `main`. PR runs never publish a report and need no secrets.
+`Checks`, `Burn-in`, `Tests` and `Visual` are the required status checks for merging into `main`. `Burn-in` is skipped on pushes to `main`, which GitHub counts as passing. To shard further, add numbers to the `test-shard` job's `matrix.shard`; the shard count follows automatically. PR runs never publish a report and need no secrets.
 
 ### `nightly.yml`
 Runs both suites on Chromium, Firefox and WebKit every day at 06:00 UTC, and on demand from the Actions tab. Each browser is a separate job, and all three finish even if one fails. Allure results are uploaded per browser. It isn't a required check: PRs stay on Chromium for speed, and this catches browser-specific breakage within a day. To be notified, enable failed-workflow emails for scheduled runs in your GitHub notification settings.

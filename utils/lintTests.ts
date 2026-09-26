@@ -14,7 +14,7 @@
 import { spawnSync } from 'child_process';
 
 /** Add new tags here so they're documented in one place */
-export const ALLOWED_TAGS = new Set(['@smoke', '@api', '@db', '@a11y', '@visual', '@quarantine']);
+export const ALLOWED_TAGS = new Set(['@smoke', '@api', '@db', '@a11y', '@visual', '@perf', '@quarantine']);
 
 export type Rule = 'unknown-tag' | 'tag-in-title' | 'quarantine-ticket';
 
@@ -45,7 +45,9 @@ interface Spec {
 
 function* specsOf(suites: Suite[], parents: string[] = []): Generator<{ spec: Spec; titlePath: string[] }> {
     for (const suite of suites) {
-        const path = suite.title && suite.title !== suite.file ? [...parents, suite.title] : parents;
+        // File-level suites are titled with the file path (with backslashes on Windows); skip them
+        const isFile = suite.title.replaceAll('\\', '/') === suite.file.replaceAll('\\', '/');
+        const path = suite.title && !isFile ? [...parents, suite.title] : parents;
         for (const spec of suite.specs ?? []) yield { spec, titlePath: [...path, spec.title] };
         yield* specsOf(suite.suites ?? [], path);
     }

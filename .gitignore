@@ -123,3 +123,5 @@ temp/
 
 # Visual test baselines are committed
 !tests/visual/__screenshots__/**/*.png
+blob-report/
+playwright-report.json

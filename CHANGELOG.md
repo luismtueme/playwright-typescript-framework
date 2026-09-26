@@ -4,6 +4,18 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-26
+
+### Added
+- Burn-in CI job (PRs): tests affected by the PR (`--only-changed`, which follows imports) run once for fast feedback, then 10 times with no retries; a single failure blocks the merge.
+- Sharded test suite (two shards, each with its own MySQL) with blob reports merged into one HTML and JSON report. The `Tests` required check is now the merge job and fails if any shard failed.
+- Results summary (`utils/prSummary.ts`): totals, failures with error and location, and flaky tests, written to the Actions job summary and posted as a PR comment that updates on each push.
+- Performance budgets (`tests/perf/budgets.spec.ts`, `config/performanceBudgets.json`): navigation timing, LCP and CLS per page, with the measured numbers attached to every test. New `@perf` tag.
+- `BLOB_REPORT` setting for sharded runs.
+
+### Fixed
+- The test lint and the summary treated Windows file-suite titles (backslashes) as describe blocks.
+
 ## [1.1.0] - 2026-09-26
 
 ### Added
@@ -35,6 +47,7 @@ Spec-only version of [playwright-cucumber-typescript-framework v1.1.0](https://g
 ### Removed
 - Cucumber: feature files, step definitions, hooks, the World, `cucumber.mts`, the step validator, the Gherkin linter and the pinned `@cucumber/*` packages. Every scenario already had a matching spec except the two database scenarios, which are now specs.
 
-[Unreleased]: https://github.com/luismtueme/playwright-typescript-framework/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/luismtueme/playwright-typescript-framework/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/luismtueme/playwright-typescript-framework/releases/tag/v1.2.0
 [1.1.0]: https://github.com/luismtueme/playwright-typescript-framework/releases/tag/v1.1.0
 [1.0.0]: https://github.com/luismtueme/playwright-typescript-framework/releases/tag/v1.0.0

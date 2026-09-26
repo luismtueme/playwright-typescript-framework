@@ -154,6 +154,8 @@ export function buildConfig(env: Env, defaults: Defaults) {
         // OpenAPI document every API response is checked against: OPENAPI_SPEC, else the demo
         // app's contract when testing the demo app, else none (checks off)
         openApiSpec: env.OPENAPI_SPEC || (useDemoApp ? path.join(ROOT, 'contracts', 'openapi.yaml') : ''),
+        // Write a mergeable blob report (CI shards) instead of the HTML report
+        blobReport: parseBoolean('BLOB_REPORT', env.BLOB_REPORT, false),
         // List every test, ignoring the visual and quarantine filters (used by npm run lint:tests)
         allTests: parseBoolean('ALL_TESTS', env.ALL_TESTS, false),
     });
