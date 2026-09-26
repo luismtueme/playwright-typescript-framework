@@ -6,13 +6,14 @@
  * Usage:
  *   npm run test:visual              compare with committed baselines
  *   npm run test:visual -- --update  write new baselines (review them in the PR)
+ *   TEST_DEVICE="Pixel 7" npm run test:visual   one device only
  *
  * Requires Docker. Extra arguments are passed to `playwright test`.
  */
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { ROOT } from '../config';
+import { config, ROOT } from '../config';
 
 const { version } = JSON.parse(
     fs.readFileSync(path.join(ROOT, 'node_modules', '@playwright', 'test', 'package.json'), 'utf8'),
@@ -47,6 +48,9 @@ const docker = [
     '-e',
     'IN_DOCKER=true',
     // Inside the container, hosts from your .env (BASE_URL, DB_HOST) are unreachable: use the demo app in memory
+    // Visual runs cover the desktop browser and every phone; TEST_DEVICE narrows it to one device
+    '-e',
+    `TEST_DEVICE=${config.device ?? ''}`,
     '-e',
     'BASE_URL=',
     '-e',

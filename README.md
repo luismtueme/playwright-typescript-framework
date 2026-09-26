@@ -28,6 +28,8 @@ This is one of three versions of the same framework. They share the design, the 
 | Generated inputs | Property-based tests (fast-check) state a rule and check it against many generated inputs, including unicode, emoji and edge lengths. They found a real bug in the demo app |
 | Reproducible data | Seeded, realistic test data. A failed test's report shows the seed; `TEST_SEED=...` reproduces it exactly |
 | Performance budgets | Each page's load metrics (navigation timing, LCP, CLS) must stay within `config/performanceBudgets.json`; the measured numbers are attached to every test |
+| Phones | Nightly runs repeat the suite on Pixel 7 and iPhone 15 profiles (viewport, touch, mobile user agent), and visual baselines exist per viewport. A PR test checks every page lays out at phone width |
+| Productivity | `npm run new:page` scaffolds a page object, fixture, spec and accessibility check that pass lint; `npm run codegen` records from a logged-in session; Playwright's AI test agents (planner, generator, healer) are set up to follow this framework's conventions |
 | Fast, trustworthy CI | New and changed tests run 10 times before merging (burn-in); the suite is sharded across machines with one merged report; every PR gets a results summary comment |
 | Database checks | `DbClient` (MySQL, pooled, parameterized). `@db` tests verify what the API wrote; CI runs them against a real MySQL |
 | Test data | Factories with automatic cleanup (`createItem`, `trackItem`). CI fails if any rows are left behind |
@@ -39,12 +41,12 @@ This is one of three versions of the same framework. They share the design, the 
 | Flaky tests | Tag `@quarantine` with a ticket: the test still runs and reports, but doesn't block merges |
 | Quality gates | Type-aware ESLint (catches unawaited promises), Prettier, strict type check, test policy lint, framework unit tests with coverage thresholds, `npm audit`, all required to merge |
 | Cross-browser | Every PR runs on Chromium. A nightly job runs everything on Chromium, Firefox and WebKit |
-| Docker | `docker compose run --rm tests` runs everything, MySQL included |
+| Docker | `docker compose run --build --rm tests` runs everything, MySQL included |
 | Demo app | `demo-app/`: a small web app and JSON API the examples run against, so everything passes out of the box |
 
 ## Quick start
 
-Requires Node.js 22.8 or newer. Or skip the local setup entirely: `docker compose run --rm tests`.
+Requires Node.js 22.8 or newer. Or skip the local setup entirely: `docker compose run --build --rm tests`.
 
 ```bash
 npm install
@@ -86,6 +88,7 @@ Settings are read in this order, first match wins: **environment variables**, th
 | `APP_USERNAME` / `APP_PASSWORD` | demo credentials for the demo app only | The `admin` role |
 | `VIEWER_USERNAME` / `VIEWER_PASSWORD` | demo credentials for the demo app only | The `viewer` role |
 | `TEST_BROWSER` | `chromium` | `chromium`, `firefox` or `webkit` |
+| `TEST_DEVICE` | unset (desktop) | A [Playwright device](https://playwright.dev/docs/emulation#devices) such as `Pixel 7` or `iPhone 15`; runs in that device's browser |
 | `HEADLESS` | `true` in CI | Show the browser locally with `HEADLESS=false` |
 | `WORKERS` / `RETRIES` | CI: 2 / 1, local: 4 / 0 | Parallelism and retries |
 | `VIDEO` / `TRACE` | `retain-on-failure` | `off`, `on` or `retain-on-failure` |
@@ -108,6 +111,10 @@ Invalid values fail at startup with the variable name, for example `TEST_BROWSER
 | `npx playwright test tests/ui/login.spec.ts` | One file |
 | `npx playwright test --ui` | Playwright's UI mode: watch, pick and debug tests |
 | `TEST_BROWSER=webkit npm test` | Everything in another browser |
+| `TEST_DEVICE="iPhone 15" npm test` | Everything on a phone profile |
+| `npm run new:page -- Settings --path /settings` | Scaffolds a page object, its fixture, a spec and an accessibility check |
+| `npm run new:spec -- checkout --page items` | Scaffolds a UI spec for an existing page object (`--api --path /api/x` for an API spec) |
+| `npm run codegen -- /items` | Playwright's code generator, already logged in (`--role viewer` for another user) |
 | `npm run test:visual` | Visual comparison in Docker. Add `-- --update` to accept new baselines |
 | `npm run test:quarantine` | Only `@quarantine` tests |
 | `npm run test:unit` | Unit tests for the framework code (`unit/`), failing below 90% line coverage |
@@ -117,7 +124,7 @@ Invalid values fail at startup with the variable name, for example `TEST_BROWSER
 | `npm run lint` / `npm run format` | ESLint and Prettier check / auto-fix |
 | `npm run typecheck` | Strict type check (no build step) |
 | `npm run demo` | Starts the demo app on http://127.0.0.1:4173 |
-| `docker compose run --rm tests` | Everything in Docker with MySQL |
+| `docker compose run --build --rm tests` | Everything in Docker with MySQL |
 
 The `@db` tests skip themselves when `DB_HOST` isn't set. To run them locally:
 
@@ -142,11 +149,13 @@ DB_HOST=127.0.0.1 DB_USER=tester DB_PASSWORD=tester DB_NAME=testdb npm test
 ├── tests/
 │   ├── fixtures.ts           # Custom fixtures: roles, page objects, API clients, test data
 │   ├── auth.setup.ts         # Logs in once per role and saves the sessions
+│   ├── seed.spec.ts          # Starting point for the AI test agents
 │   ├── ui/                   # Browser tests: accessibility, roles, session timeout, network faults
 │   ├── api/                  # API tests, permissions matrix, generated-input tests
 │   ├── db/                   # Database checks (skip without DB_HOST)
 │   ├── perf/                 # Performance budgets
 │   └── visual/               # Screenshot tests and committed baselines (__screenshots__/)
+├── specs/                    # Test plans written by the AI planner agent
 ├── unit/                     # Unit tests for the framework itself (node:test)
 ├── utils/
 │   ├── apiClient.ts          # HTTP client (Playwright request API)
@@ -155,6 +164,8 @@ DB_HOST=127.0.0.1 DB_USER=tester DB_PASSWORD=tester DB_NAME=testdb npm test
 │   ├── testData.ts           # Seeded random data (TEST_SEED)
 │   ├── performance.ts        # Page load metrics (navigation timing, LCP, CLS)
 │   ├── prSummary.ts          # Results summary for the PR comment and job summary
+│   ├── scaffold.ts           # npm run new:page / new:spec
+│   ├── codegen.ts            # npm run codegen, logged in
 │   ├── dbClient.ts           # MySQL client
 │   ├── authState.ts          # Where each role's saved session lives
 │   ├── accessibility.ts      # axe-core WCAG checks
@@ -169,6 +180,8 @@ DB_HOST=127.0.0.1 DB_USER=tester DB_PASSWORD=tester DB_NAME=testdb npm test
 ├── tsconfig.json
 ├── eslint.config.ts
 ├── Dockerfile, docker-compose.yml
+├── .claude/agents/, .mcp.json # Playwright AI test agents and their MCP server
+├── AGENTS.md                 # Conventions for AI coding assistants (CLAUDE.md points here)
 └── .env.example              # Every supported variable
 ```
 
@@ -268,6 +281,16 @@ export class LoginPage extends BasePage {
 
 Expose locators and user actions, and keep `expect` out of page objects so a failure points at the test that made the claim.
 
+### Scaffolding and recording
+
+`npm run new:page -- Settings --path /settings` creates `pages/SettingsPage.ts`, registers a `settingsPage` fixture, and adds `tests/ui/settings.spec.ts` and an accessibility check. Everything it writes passes lint and typecheck, so you start from green and fill in locators. `npm run new:spec` adds a spec for an existing page object, or an API spec with `--api`. (In Git Bash, prefix commands that take `--path /x` with `MSYS_NO_PATHCONV=1`, or use PowerShell; Git Bash rewrites arguments that start with `/`.)
+
+`npm run codegen -- /items` logs in through the API, as the setup project does, and opens Playwright's code generator on that page with the session loaded, starting the demo app if needed. Record the steps, then move the locators into a page object.
+
+### AI test agents
+
+Playwright's [test agents](https://playwright.dev/docs/test-agents) are set up for Claude Code (`.claude/agents/`, `.mcp.json`). The planner explores the app and writes a plan to `specs/`, the generator turns a plan into a spec by driving a real browser, and the healer debugs failing tests. They start from `tests/seed.spec.ts` (logged in, using this framework's fixtures) and follow [AGENTS.md](AGENTS.md): page objects, roles, cleanup and tags. The healer is told to quarantine with a ticket instead of marking tests `fixme`. Generated tests go through the same CI gates as any other PR. See [specs/README.md](specs/README.md) for a walkthrough.
+
 ### Accessibility and page structure
 
 `tests/ui/accessibility.spec.ts` runs axe on every page; add a line for each new page, or call `checkAccessibility()` in any test. Aria snapshots check a page's structure (headings, roles, labels) and ignore styling, so they're steadier than screenshots for what a page contains:
@@ -344,7 +367,7 @@ TEST_SEED=28259670 npx playwright test tests/ui/items.spec.ts
 
 ### Visual comparison
 
-Specs in `tests/visual/` compare screenshots with baselines in `tests/visual/__screenshots__/`. They run only through `npm run test:visual`, which uses the Playwright Docker image so fonts and anti-aliasing match everywhere (running them outside Docker is refused). After an intended UI change, run `npm run test:visual -- --update` and review the new images in the PR. Mask anything that changes between runs with `mask: [locator]`.
+Specs in `tests/visual/` compare screenshots with baselines in `tests/visual/__screenshots__/`. They run only through `npm run test:visual`, which uses the Playwright Docker image so fonts and anti-aliasing match everywhere (running them outside Docker is refused). After an intended UI change, run `npm run test:visual -- --update` and review the new images in the PR. Mask anything that changes between runs with `mask: [locator]`. Each page is compared at desktop size and on Pixel 7 and iPhone 15 (in their own browsers), with baselines per viewport (`__screenshots__/<spec>/pixel-7/`, `.../iphone-15/`). `TEST_DEVICE="Pixel 7" npm run test:visual` checks one device.
 
 ### Quarantining a flaky test
 
@@ -374,7 +397,7 @@ In CI, the Allure report for every push to `main` is published to GitHub Pages. 
 | Tests | Merges the shard reports into one HTML report, writes the results summary to the job and as a PR comment (updated on each push), and fails if any shard failed |
 | Visual | Screenshot comparison in the Playwright Docker image. Uploads expected/actual/diff images on failure |
 | Publish Allure Report | On `main` only: builds the report and deploys it to GitHub Pages |
-| Nightly Cross-Browser | Daily at 06:00 UTC (and on demand): everything on Chromium, Firefox and WebKit. Not required to merge |
+| Nightly Cross-Browser | Daily at 06:00 UTC (and on demand): everything on Chromium, Firefox and WebKit, and on Pixel 7 and iPhone 15 profiles. Not required to merge |
 
 `main` is protected: changes need a PR with Checks, Burn-in, Tests and Visual passing. Dependabot opens weekly update PRs. See [.github/GITHUB_ACTIONS_GUIDE.md](.github/GITHUB_ACTIONS_GUIDE.md) for setup in your own repository.
 

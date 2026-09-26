@@ -1,7 +1,7 @@
-# Full test environment: the suite plus a throwaway MySQL for @db scenarios.
+# Full test environment: the suite plus a throwaway MySQL for @db tests.
 #
-#   docker compose run --rm tests            run everything
-#   docker compose run --rm tests npx playwright test --grep @smoke
+#   docker compose run --build --rm tests    run everything (--build picks up code changes)
+#   docker compose run --build --rm tests npx playwright test --grep @smoke
 #   docker compose down -v                   remove the database afterwards
 #
 # Reports and artifacts are written back to ./allure-results, ./html-report,
