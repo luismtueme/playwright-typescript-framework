@@ -60,12 +60,15 @@ jobs:
       - name: Validate Test Definitions
         run: npm run check
 
-  test:
-    name: Tests
+  # PRs only: the tests affected by this PR's changes (Playwright's --only-changed follows
+  # imports, so a change to a page object or fixture selects every test that uses it).
+  # They run once for fast feedback, then 10 more times to catch flakiness before merging.
+  burn-in:
+    name: Burn-in
     needs: check
+    if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # A real MySQL so the @db scenarios run; the demo app stores items in it
+    timeout-minutes: 25
     services:
       mysql:
         image: mysql:8.4
@@ -82,6 +85,82 @@ jobs:
       CI: true
       TEST_ENV: ci
       TEST_BROWSER: chromium
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: tester
+      DB_PASSWORD: ci-password
+      DB_NAME: testdb
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          # --only-changed compares against the base branch, so it needs the history
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Install Playwright Browser
+        run: npx playwright install --with-deps ${{ env.TEST_BROWSER }}
+
+      - name: Affected Tests (fast feedback)
+        run: npx playwright test --only-changed=origin/${{ github.base_ref }} --pass-with-no-tests
+
+      # No retries: a test that fails once in 10 runs is flaky, and flaky tests don't merge
+      - name: Burn-in (affected tests x10)
+        run: >-
+          npx playwright test --only-changed=origin/${{ github.base_ref }} --pass-with-no-tests
+          --repeat-each=10 --retries=0
+
+      - name: Check for Leftover Test Data
+        if: ${{ !cancelled() }}
+        run: npm run check:leftovers
+
+      - name: Upload Burn-in Artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: burn-in-artifacts
+          path: |
+            test-results/
+            html-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The full suite, split across machines. Each shard has its own MySQL and writes a
+  # blob report; the Tests job below merges them into one report.
+  test-shard:
+    name: Tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root
+          MYSQL_DATABASE: testdb
+          MYSQL_USER: tester
+          MYSQL_PASSWORD: ci-password
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-root"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: true
+      TEST_ENV: ci
+      TEST_BROWSER: chromium
+      BLOB_REPORT: true
       # Throwaway CI database. For a real app, read credentials from secrets:
       #   APP_USERNAME: ${{ secrets.APP_USERNAME }}
       #   APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
@@ -107,12 +186,16 @@ jobs:
         run: npx playwright install --with-deps ${{ env.TEST_BROWSER }}
 
       - name: Run Playwright Tests
-        run: npx playwright test
+        run: npx playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
-      # Flaky tests tagged @quarantine run here: results reach the report, but never fail the job
+      # Flaky tests tagged @quarantine run here (once, in shard 1): results reach the
+      # report, but never fail the job
       - name: Run Quarantined Tests (non-blocking)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.shard == 1 }}
         continue-on-error: true
+        # Not a blob: that would overwrite this shard's blob report
+        env:
+          BLOB_REPORT: false
         run: npm run test:quarantine
 
       # Every test must delete what it creates; fails the job if rows are left behind
@@ -120,27 +203,104 @@ jobs:
         if: ${{ !cancelled() }}
         run: npm run check:leftovers
 
-      - name: Upload Test Artifacts
+      - name: Upload Blob Report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: test-artifacts
-          path: |
-            traces/
-            videos/
-            test-results/
-            html-report/
-          if-no-files-found: ignore
-          retention-days: 14
+          name: blob-report-${{ matrix.shard }}
+          path: blob-report/
+          retention-days: 3
 
       - name: Upload Allure Results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: allure-results
+          name: allure-results-${{ matrix.shard }}
           path: allure-results/
           include-hidden-files: true
           retention-days: 14
+
+      - name: Upload Test Artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-artifacts-${{ matrix.shard }}
+          path: |
+            traces/
+            videos/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Required check: merges the shard reports, posts the results summary on the PR,
+  # and fails if any shard failed
+  test:
+    name: Tests
+    needs: test-shard
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Download Blob Reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: blob-report-*
+          path: all-blob-reports
+          merge-multiple: true
+
+      - name: Merge Reports
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: html-report
+          PLAYWRIGHT_HTML_OPEN: never
+          PLAYWRIGHT_JSON_OUTPUT_NAME: playwright-report.json
+        run: npx playwright merge-reports --reporter=html,json ./all-blob-reports
+
+      # Also fails if the merged report has fewer tests than the suite (a lost shard report)
+      - name: Write Results Summary
+        shell: bash
+        run: |
+          LISTED=$(npx playwright test --list | grep -oE 'Total: [0-9]+' | grep -oE '[0-9]+')
+          npx tsx utils/prSummary.ts playwright-report.json --listed-tests="$LISTED" | tee summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Updates the bot's previous summary comment instead of adding one per push.
+      # Skipped for forks and Dependabot, whose tokens can't comment.
+      - name: Comment Summary on the PR
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh pr comment ${{ github.event.pull_request.number }} --body-file summary.md --edit-last --create-if-none
+          || gh pr comment ${{ github.event.pull_request.number }} --body-file summary.md
+
+      - name: Upload HTML Report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: html-report
+          path: html-report/
+          retention-days: 14
+
+      - name: Fail if Any Shard Failed
+        if: ${{ needs.test-shard.result != 'success' }}
+        run: |
+          echo "A test shard failed (result: ${{ needs.test-shard.result }}). See the summary above."
+          exit 1
 
   # Screenshot comparison against tests/visual/__screenshots__, inside the Playwright
   # Docker image so rendering matches the committed baselines exactly
@@ -204,11 +364,12 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Download Allure Results
+      - name: Download Allure Results (all shards)
         uses: actions/download-artifact@v8
         with:
-          name: allure-results
+          pattern: allure-results-*
           path: allure-results/
+          merge-multiple: true
 
       - name: Restore Allure History
         uses: actions/cache/restore@v6

@@ -26,7 +26,7 @@ Or run everything in Docker, MySQL included: `docker compose run --rm tests`.
    npm test            # every spec
    ```
    `npm run format` fixes most lint findings automatically.
-4. Open a PR. It merges once the `Checks`, `Tests` and `Visual` jobs pass, and is squash-merged so `main` stays linear.
+4. Open a PR. It merges once the `Checks`, `Burn-in`, `Tests` and `Visual` jobs pass, and is squash-merged so `main` stays linear. A results summary is posted on the PR.
 
 ## Conventions
 
@@ -46,6 +46,9 @@ Or run everything in Docker, MySQL included: `docker compose run --rm tests`.
 
 **Test data**
 - Use the `random` fixture (or `createItem()`) for generated values, not `Math.random()`, so a failure reproduces with its seed.
+
+**Before pushing a new test**
+- Burn it in locally: `npx playwright test --only-changed=main --repeat-each=10 --retries=0`. CI does the same on every PR, and a single failure blocks the merge.
 
 **Flaky tests**
 - Don't retry your way past a flaky test. Quarantine it with a ticket, fix the cause, and remove the tag:

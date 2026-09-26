@@ -31,7 +31,14 @@ export default defineConfig({
         toHaveScreenshot: { maxDiffPixels: 10, animations: 'disabled' },
     },
     snapshotPathTemplate: '{testDir}/visual/__screenshots__/{testFileName}/{arg}{ext}',
-    reporter: [['list'], ['allure-playwright'], ['html', { outputFolder: 'html-report', open: 'never' }]],
+    // CI shards write blob reports that the merge job combines into one HTML and JSON report
+    reporter: [
+        ['list'],
+        ['allure-playwright'],
+        config.blobReport
+            ? ['blob', { outputDir: 'blob-report' }]
+            : ['html', { outputFolder: 'html-report', open: 'never' }],
+    ],
     use: {
         ...devices[DEVICES[config.browser]],
         baseURL,

@@ -27,6 +27,8 @@ This is one of three versions of the same framework. They share the design, the 
 | Resilience | Network fault tests with `page.route`: server errors, dropped connections, slow responses, failed saves |
 | Generated inputs | Property-based tests (fast-check) state a rule and check it against many generated inputs, including unicode, emoji and edge lengths. They found a real bug in the demo app |
 | Reproducible data | Seeded, realistic test data. A failed test's report shows the seed; `TEST_SEED=...` reproduces it exactly |
+| Performance budgets | Each page's load metrics (navigation timing, LCP, CLS) must stay within `config/performanceBudgets.json`; the measured numbers are attached to every test |
+| Fast, trustworthy CI | New and changed tests run 10 times before merging (burn-in); the suite is sharded across machines with one merged report; every PR gets a results summary comment |
 | Database checks | `DbClient` (MySQL, pooled, parameterized). `@db` tests verify what the API wrote; CI runs them against a real MySQL |
 | Test data | Factories with automatic cleanup (`createItem`, `trackItem`). CI fails if any rows are left behind |
 | Accessibility | axe-core checks every page against WCAG 2.1 A/AA, plus aria snapshots of each page's structure |
@@ -100,7 +102,9 @@ Invalid values fail at startup with the variable name, for example `TEST_BROWSER
 | Command | What it runs |
 |---|---|
 | `npm test` | Clean results, then every spec |
-| `npx playwright test --grep @smoke` | Tests by tag (`{ tag: '@smoke' }`). Allowed tags: `@smoke`, `@api`, `@db`, `@a11y`, `@visual`, `@quarantine` |
+| `npx playwright test --grep @smoke` | Tests by tag (`{ tag: '@smoke' }`). Allowed tags: `@smoke`, `@api`, `@db`, `@a11y`, `@visual`, `@perf`, `@quarantine` |
+| `npx playwright test --only-changed=main` | Only the tests affected by your changes (what CI burns in) |
+| `npx playwright test --only-changed=main --repeat-each=10 --retries=0` | Burn-in locally: catch a flaky test before CI does |
 | `npx playwright test tests/ui/login.spec.ts` | One file |
 | `npx playwright test --ui` | Playwright's UI mode: watch, pick and debug tests |
 | `TEST_BROWSER=webkit npm test` | Everything in another browser |
@@ -128,7 +132,8 @@ DB_HOST=127.0.0.1 DB_USER=tester DB_PASSWORD=tester DB_NAME=testdb npm test
 ```
 ├── config/
 │   ├── index.ts              # Loads and validates configuration, roles and credentials
-│   └── testConfig.json       # Non-secret defaults
+│   ├── testConfig.json       # Non-secret defaults
+│   └── performanceBudgets.json # Load-time budgets per page
 ├── contracts/
 │   ├── openapi.yaml          # API contract: source of truth for types and response checks
 │   └── openapi.d.ts          # Generated types (npm run generate:api)
@@ -140,6 +145,7 @@ DB_HOST=127.0.0.1 DB_USER=tester DB_PASSWORD=tester DB_NAME=testdb npm test
 │   ├── ui/                   # Browser tests: accessibility, roles, session timeout, network faults
 │   ├── api/                  # API tests, permissions matrix, generated-input tests
 │   ├── db/                   # Database checks (skip without DB_HOST)
+│   ├── perf/                 # Performance budgets
 │   └── visual/               # Screenshot tests and committed baselines (__screenshots__/)
 ├── unit/                     # Unit tests for the framework itself (node:test)
 ├── utils/
@@ -147,6 +153,8 @@ DB_HOST=127.0.0.1 DB_USER=tester DB_PASSWORD=tester DB_NAME=testdb npm test
 │   ├── contract.ts           # Validates responses against the OpenAPI contract
 │   ├── generateApiTypes.ts   # Generates and checks contracts/openapi.d.ts
 │   ├── testData.ts           # Seeded random data (TEST_SEED)
+│   ├── performance.ts        # Page load metrics (navigation timing, LCP, CLS)
+│   ├── prSummary.ts          # Results summary for the PR comment and job summary
 │   ├── dbClient.ts           # MySQL client
 │   ├── authState.ts          # Where each role's saved session lives
 │   ├── accessibility.ts      # axe-core WCAG checks
@@ -330,6 +338,10 @@ Every run has one seed (`TEST_SEED`, or a new one per run), and each test gets i
 TEST_SEED=28259670 npx playwright test tests/ui/items.spec.ts
 ```
 
+### Performance budgets
+
+`tests/perf/budgets.spec.ts` loads each page and checks its metrics against `config/performanceBudgets.json` (a `default` budget, with per-page overrides). The numbers are attached to every test, so the report shows them even when they pass. LCP and CLS are measured in Chromium only. CI machines are noisy, so keep budgets loose enough to avoid false alarms and tight enough to catch a real regression: an 800ms slowdown on the login page fails with `ttfb 814 > budget 500`.
+
 ### Visual comparison
 
 Specs in `tests/visual/` compare screenshots with baselines in `tests/visual/__screenshots__/`. They run only through `npm run test:visual`, which uses the Playwright Docker image so fonts and anti-aliasing match everywhere (running them outside Docker is refused). After an intended UI change, run `npm run test:visual -- --update` and review the new images in the PR. Mask anything that changes between runs with `mask: [locator]`.
@@ -357,12 +369,14 @@ In CI, the Allure report for every push to `main` is published to GitHub Pages. 
 | Job | Runs |
 |---|---|
 | Checks | Lint and format, type check, API types match the contract, `npm audit` (high and critical), unit tests with coverage thresholds, test list and policy lint |
-| Tests | Every spec against the demo app, backed by a MySQL service container. Then quarantined tests (non-blocking) and a check that no test data was left behind |
+| Burn-in | PRs only. The tests affected by the PR (`--only-changed`, which follows imports) run once for fast feedback, then 10 more times without retries. A test that fails once is flaky, and doesn't merge |
+| Tests (shard 1/2, 2/2) | The full suite split across two machines, each with its own MySQL. Then quarantined tests (non-blocking) and a check that no test data was left behind |
+| Tests | Merges the shard reports into one HTML report, writes the results summary to the job and as a PR comment (updated on each push), and fails if any shard failed |
 | Visual | Screenshot comparison in the Playwright Docker image. Uploads expected/actual/diff images on failure |
 | Publish Allure Report | On `main` only: builds the report and deploys it to GitHub Pages |
 | Nightly Cross-Browser | Daily at 06:00 UTC (and on demand): everything on Chromium, Firefox and WebKit. Not required to merge |
 
-`main` is protected: changes need a PR with Checks, Tests and Visual passing. Dependabot opens weekly update PRs. See [.github/GITHUB_ACTIONS_GUIDE.md](.github/GITHUB_ACTIONS_GUIDE.md) for setup in your own repository.
+`main` is protected: changes need a PR with Checks, Burn-in, Tests and Visual passing. Dependabot opens weekly update PRs. See [.github/GITHUB_ACTIONS_GUIDE.md](.github/GITHUB_ACTIONS_GUIDE.md) for setup in your own repository.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to make changes, and [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 
