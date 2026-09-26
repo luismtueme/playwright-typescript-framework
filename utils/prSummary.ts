@@ -78,15 +78,35 @@ function collect(report: JsonReport) {
     return { failed, flaky };
 }
 
-export function renderSummary(report: JsonReport, { runUrl }: { runUrl?: string } = {}): string {
+/**
+ * Tests missing from the merged report, e.g. because a shard's report was lost or
+ * overwritten. `listed` is the suite's size from `playwright test --list`; the
+ * merged report can be larger (setup tests run in every shard) but never smaller.
+ */
+export function missingTests(report: JsonReport, listed: number): number {
+    const { expected, unexpected, flaky, skipped } = report.stats;
+    return Math.max(0, listed - (expected + unexpected + flaky + skipped));
+}
+
+export function renderSummary(
+    report: JsonReport,
+    { runUrl, listedTests }: { runUrl?: string | undefined; listedTests?: number | undefined } = {},
+): string {
     const { expected, unexpected, flaky, skipped, duration } = report.stats;
     const { failed, flaky: flakyTests } = collect(report);
-    const icon = unexpected > 0 ? '❌' : flaky > 0 ? '⚠️' : '✅';
+    const missing = listedTests === undefined ? 0 : missingTests(report, listedTests);
+    const icon = unexpected > 0 || missing > 0 ? '❌' : flaky > 0 ? '⚠️' : '✅';
     const lines = [
         COMMENT_MARKER,
         `### ${icon} Playwright: ${expected} passed, ${unexpected} failed, ${flaky} flaky, ${skipped} skipped (${(duration / 1000).toFixed(1)}s)`,
         '',
     ];
+    if (missing > 0) {
+        lines.push(
+            `**${missing} test(s) missing from the report:** the suite has ${listedTests}, the merged report fewer. A shard's report was lost or overwritten.`,
+            '',
+        );
+    }
     if (failed.length > 0) {
         lines.push('**Failed**', '', '| Test | Project | Error |', '|---|---|---|');
         for (const f of failed) {
@@ -105,16 +125,21 @@ export function renderSummary(report: JsonReport, { runUrl }: { runUrl?: string 
     return lines.join('\n').trimEnd() + '\n';
 }
 
+// Usage: tsx utils/prSummary.ts <report.json> [--listed-tests=N]
+// With --listed-tests, exits 1 when the merged report has fewer tests than the suite.
 if (require.main === module) {
     const file = process.argv[2];
     if (!file) {
-        console.error('Usage: tsx utils/prSummary.ts <report.json>');
+        console.error('Usage: tsx utils/prSummary.ts <report.json> [--listed-tests=N]');
         process.exit(1);
     }
+    const listedArg = process.argv.find((arg) => arg.startsWith('--listed-tests='));
+    const listedTests = listedArg ? Number(listedArg.split('=')[1]) : undefined;
     const report = JSON.parse(fs.readFileSync(file, 'utf8')) as JsonReport;
     const { GITHUB_SERVER_URL, GITHUB_REPOSITORY, GITHUB_RUN_ID } = process.env;
     const runUrl = GITHUB_RUN_ID
         ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
         : undefined;
-    process.stdout.write(renderSummary(report, { runUrl }));
+    process.stdout.write(renderSummary(report, { runUrl, listedTests }));
+    if (listedTests !== undefined && missingTests(report, listedTests) > 0) process.exitCode = 1;
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderSummary, COMMENT_MARKER, type JsonReport } from '../utils/prSummary';
+import { renderSummary, missingTests, COMMENT_MARKER, type JsonReport } from '../utils/prSummary';
 
 function report(
     tests: Array<{ title: string; status: 'expected' | 'unexpected' | 'flaky' | 'skipped'; error?: string }>,
@@ -89,4 +89,25 @@ test('links to the run when a URL is given', () => {
         renderSummary(report([]), { runUrl: 'https://example/run/1' }),
         /\[run artifacts\]\(https:\/\/example\/run\/1\)/,
     );
+});
+
+test('a merged report with fewer tests than the suite is flagged', () => {
+    const r = report([{ title: 'only one', status: 'expected' }]);
+    const md = renderSummary(r, { listedTests: 3 });
+    assert.match(md, /### ❌/);
+    assert.match(md, /\*\*2 test\(s\) missing from the report:\*\* the suite has 3/);
+    // More tests than listed is fine: setup tests run once per shard
+    assert.doesNotMatch(renderSummary(r, { listedTests: 1 }), /missing/);
+});
+
+test('missingTests counts every status and never goes below zero', () => {
+    const r = report([
+        { title: 'a', status: 'expected' },
+        { title: 'b', status: 'unexpected', error: 'x' },
+        { title: 'c', status: 'flaky' },
+        { title: 'd', status: 'skipped' },
+    ]);
+    assert.equal(missingTests(r, 6), 2);
+    assert.equal(missingTests(r, 4), 0);
+    assert.equal(missingTests(r, 2), 0);
 });

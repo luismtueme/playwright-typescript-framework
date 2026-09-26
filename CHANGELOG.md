@@ -10,6 +10,7 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 - Burn-in CI job (PRs): tests affected by the PR (`--only-changed`, which follows imports) run once for fast feedback, then 10 times with no retries; a single failure blocks the merge.
 - Sharded test suite (two shards, each with its own MySQL) with blob reports merged into one HTML and JSON report. The `Tests` required check is now the merge job and fails if any shard failed.
 - Results summary (`utils/prSummary.ts`): totals, failures with error and location, and flaky tests, written to the Actions job summary and posted as a PR comment that updates on each push.
+- Missing-tests guard: the merge job fails if the merged report has fewer tests than `playwright test --list` counts, so a lost or overwritten shard report can't pass silently. (Found on this PR's own first run: the quarantine step overwrote shard 1's blob report, and the merged report had 28 of 51 tests while every check was green.)
 - Performance budgets (`tests/perf/budgets.spec.ts`, `config/performanceBudgets.json`): navigation timing, LCP and CLS per page, with the measured numbers attached to every test. New `@perf` tag.
 - `BLOB_REPORT` setting for sharded runs.
 

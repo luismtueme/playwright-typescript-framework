@@ -193,6 +193,9 @@ jobs:
       - name: Run Quarantined Tests (non-blocking)
         if: ${{ !cancelled() && matrix.shard == 1 }}
         continue-on-error: true
+        # Not a blob: that would overwrite this shard's blob report
+        env:
+          BLOB_REPORT: false
         run: npm run test:quarantine
 
       # Every test must delete what it creates; fails the job if rows are left behind
@@ -267,13 +270,17 @@ jobs:
           PLAYWRIGHT_JSON_OUTPUT_NAME: playwright-report.json
         run: npx playwright merge-reports --reporter=html,json ./all-blob-reports
 
+      # Also fails if the merged report has fewer tests than the suite (a lost shard report)
       - name: Write Results Summary
-        run: npx tsx utils/prSummary.ts playwright-report.json | tee summary.md >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+        run: |
+          LISTED=$(npx playwright test --list | grep -oE 'Total: [0-9]+' | grep -oE '[0-9]+')
+          npx tsx utils/prSummary.ts playwright-report.json --listed-tests="$LISTED" | tee summary.md >> "$GITHUB_STEP_SUMMARY"
 
       # Updates the bot's previous summary comment instead of adding one per push.
       # Skipped for forks and Dependabot, whose tokens can't comment.
       - name: Comment Summary on the PR
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -282,6 +289,7 @@ jobs:
           || gh pr comment ${{ github.event.pull_request.number }} --body-file summary.md
 
       - name: Upload HTML Report
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: html-report
