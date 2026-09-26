@@ -21,7 +21,7 @@ Automated testing workflow that runs on every pull request to `main`, every push
 `Checks`, `Burn-in`, `Tests` and `Visual` are the required status checks for merging into `main`. `Burn-in` is skipped on pushes to `main`, which GitHub counts as passing. To shard further, add numbers to the `test-shard` job's `matrix.shard`; the shard count follows automatically. PR runs never publish a report and need no secrets.
 
 ### `nightly.yml`
-Runs both suites on Chromium, Firefox and WebKit every day at 06:00 UTC, and on demand from the Actions tab. Each browser is a separate job, and all three finish even if one fails. Allure results are uploaded per browser. It isn't a required check: PRs stay on Chromium for speed, and this catches browser-specific breakage within a day. To be notified, enable failed-workflow emails for scheduled runs in your GitHub notification settings.
+Runs every test on Chromium, Firefox and WebKit, and on Pixel 7 (Chromium) and iPhone 15 (WebKit) device profiles, every day at 06:00 UTC and on demand from the Actions tab. Each is a separate job, and all finish even if one fails. Allure results are uploaded per job. Each matrix entry has a unique `name`: an `include` entry that only adds a key (such as `device`) would otherwise be merged into the existing job for its browser. It isn't a required check: PRs stay on desktop Chromium for speed, and this catches browser- and device-specific breakage within a day. To be notified, enable failed-workflow emails for scheduled runs in your GitHub notification settings.
 
 ### `dependabot.yml`
 Opens weekly PRs for npm and GitHub Actions updates. Minor and patch npm updates are grouped into one PR.

@@ -11,12 +11,12 @@ cp .env.example .env   # optional; the demo app needs no settings
 npm test
 ```
 
-Or run everything in Docker, MySQL included: `docker compose run --rm tests`.
+Or run everything in Docker, MySQL included: `docker compose run --build --rm tests`.
 
 ## Making a change
 
 1. Branch from `main`. Direct pushes to `main` are blocked.
-2. Make the change, with tests. A new utility gets a unit test in `unit/`; a new page gets a page object, an accessibility line and, if its look matters, a visual test.
+2. Make the change, with tests. A new utility gets a unit test in `unit/`; a new page gets a page object, an accessibility line and, if its look matters, a visual test (`npm run new:page` creates the first two for you).
 3. Before pushing, run the same checks CI runs:
    ```bash
    npm run lint        # ESLint (type-aware) and Prettier
@@ -56,7 +56,10 @@ Or run everything in Docker, MySQL included: `docker compose run --rm tests`.
   Quarantined tests still run and report in CI, without blocking merges.
 
 **Visual baselines**
-- Update them only with `npm run test:visual -- --update` (Docker), and review the image diff in the PR.
+- Update them only with `npm run test:visual -- --update` (Docker), and review the image diff in the PR. Desktop and phone baselines are separate files; check both.
+
+**AI-generated tests**
+- Tests from the Playwright agents or any AI assistant follow [AGENTS.md](AGENTS.md) and are reviewed like hand-written ones. Check that they use page objects and fixtures, and assert something meaningful.
 
 ## Versions and changelog
 

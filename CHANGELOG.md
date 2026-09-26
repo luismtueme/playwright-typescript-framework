@@ -4,6 +4,21 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-26
+
+### Added
+- Playwright AI test agents for Claude Code (planner, generator, healer) with the test MCP server, adapted to this framework: a logged-in seed test using the fixtures, the framework's conventions in each agent, and a healer that quarantines with a ticket instead of using `test.fixme()`.
+- `AGENTS.md`: conventions for AI coding assistants (`CLAUDE.md` imports it).
+- `npm run new:page` and `npm run new:spec`: scaffold page objects (with fixture and accessibility check), UI specs and API specs that pass lint and typecheck as generated.
+- `npm run codegen`: Playwright's code generator with a logged-in session for any role, starting the demo app if needed.
+- `TEST_DEVICE` runs the suite on a Playwright device profile. The nightly run adds Pixel 7 (Chromium) and iPhone 15 (WebKit).
+- Visual tests run at desktop size and on Pixel 7 and iPhone 15, with baselines per viewport.
+- A phone-layout test on every PR: each page lays out at the phone's width with no horizontal scrolling.
+
+### Fixed
+- `docker compose run` is documented with `--build`; without it, Compose reuses an image built from older code.
+- Demo app pages had no `<meta name="viewport">`, so phones rendered them 980px wide and shrunk them. Found by the new phone baselines.
+
 ## [1.2.0] - 2026-09-26
 
 ### Added
@@ -48,7 +63,8 @@ Spec-only version of [playwright-cucumber-typescript-framework v1.1.0](https://g
 ### Removed
 - Cucumber: feature files, step definitions, hooks, the World, `cucumber.mts`, the step validator, the Gherkin linter and the pinned `@cucumber/*` packages. Every scenario already had a matching spec except the two database scenarios, which are now specs.
 
-[Unreleased]: https://github.com/luismtueme/playwright-typescript-framework/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/luismtueme/playwright-typescript-framework/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/luismtueme/playwright-typescript-framework/releases/tag/v1.3.0
 [1.2.0]: https://github.com/luismtueme/playwright-typescript-framework/releases/tag/v1.2.0
 [1.1.0]: https://github.com/luismtueme/playwright-typescript-framework/releases/tag/v1.1.0
 [1.0.0]: https://github.com/luismtueme/playwright-typescript-framework/releases/tag/v1.0.0

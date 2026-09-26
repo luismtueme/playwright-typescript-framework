@@ -1,7 +1,9 @@
 name: Nightly Cross-Browser
 
-# Runs every test in Chromium, Firefox and WebKit. PRs stay on Chromium (fast);
-# this catches browser-specific breakage within a day. Not a required check.
+# Runs every test in Chromium, Firefox and WebKit, and on phones (Pixel 7 in Chromium,
+# iPhone 15 in WebKit: viewport, touch and mobile user agent). PRs stay on desktop
+# Chromium (fast); this catches browser- and device-specific breakage within a day.
+# Not a required check.
 on:
   schedule:
     - cron: '0 6 * * *' # 06:00 UTC daily
@@ -16,14 +18,22 @@ concurrency:
 
 jobs:
   test:
-    name: Tests (${{ matrix.browser }})
+    name: Tests (${{ matrix.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       # Finish every browser even if one fails, to see the full picture
       fail-fast: false
+      # A unique name per entry: an include entry that only adds a key (device) would
+      # otherwise be merged into the existing job for its browser instead of adding one
       matrix:
-        browser: [chromium, firefox, webkit]
+        include:
+          - { name: chromium, browser: chromium }
+          - { name: firefox, browser: firefox }
+          - { name: webkit, browser: webkit }
+          # Phones run in the browser their device profile ships with
+          - { name: Pixel 7, browser: chromium, device: Pixel 7 }
+          - { name: iPhone 15, browser: webkit, device: iPhone 15 }
     services:
       mysql:
         image: mysql:8.4
@@ -40,6 +50,7 @@ jobs:
       CI: true
       TEST_ENV: nightly
       TEST_BROWSER: ${{ matrix.browser }}
+      TEST_DEVICE: ${{ matrix.device }}
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
       DB_USER: tester
@@ -72,7 +83,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: allure-results-${{ matrix.browser }}
+          name: allure-results-${{ matrix.name }}
           path: allure-results/
           include-hidden-files: true
           retention-days: 7
@@ -81,7 +92,7 @@ jobs:
         if: ${{ failure() }}
         uses: actions/upload-artifact@v7
         with:
-          name: test-artifacts-${{ matrix.browser }}
+          name: test-artifacts-${{ matrix.name }}
           path: |
             traces/
             videos/

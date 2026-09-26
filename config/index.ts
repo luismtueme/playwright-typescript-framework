@@ -130,6 +130,8 @@ export function buildConfig(env: Env, defaults: Defaults) {
         demoAppPort: parseInteger('DEMO_APP_PORT', env.DEMO_APP_PORT, 4173),
         apiBaseUrl: trimSlash(env.API_BASE_URL || baseUrl),
         browser: oneOf('TEST_BROWSER', env.TEST_BROWSER || defaults.browser, BROWSERS),
+        /** A Playwright device name ("Pixel 7", "iPhone 15") to emulate instead of a desktop browser */
+        device: env.TEST_DEVICE?.trim() || undefined,
         headless: parseBoolean('HEADLESS', env.HEADLESS, isCI ? true : defaults.headless),
         viewport: Object.freeze({ ...defaults.viewport }),
         timeouts: Object.freeze({
@@ -162,6 +164,11 @@ export function buildConfig(env: Env, defaults: Defaults) {
 }
 
 export type Config = ReturnType<typeof buildConfig>;
+
+/** URL of the app under test: BASE_URL, or the bundled demo app */
+export function appUrl(c: Pick<Config, 'baseUrl' | 'demoAppPort'>): string {
+    return c.baseUrl || `http://127.0.0.1:${c.demoAppPort}`;
+}
 
 /** Returns a role's credentials, or throws naming the variables to set. */
 export function requireCredentials(

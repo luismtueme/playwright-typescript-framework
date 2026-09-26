@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildConfig, requireCredentials, DEMO_USERS, type Defaults } from '../config';
+import { appUrl, buildConfig, requireCredentials, DEMO_USERS, type Defaults } from '../config';
 
 const defaults: Defaults = {
     baseUrl: '',
@@ -93,4 +93,15 @@ test('each role reads its own credentials from the environment', () => {
     );
     assert.deepEqual(requireCredentials(config, 'admin'), { username: 'qa-admin', password: 'a' });
     assert.deepEqual(requireCredentials(config, 'viewer'), { username: 'qa-viewer', password: 'v' });
+});
+
+test('TEST_DEVICE selects a device; blank means the desktop browser', () => {
+    assert.equal(buildConfig({ TEST_DEVICE: ' Pixel 7 ' }, defaults).device, 'Pixel 7');
+    assert.equal(buildConfig({ TEST_DEVICE: '' }, defaults).device, undefined);
+    assert.equal(buildConfig({}, defaults).device, undefined);
+});
+
+test('appUrl is BASE_URL, or the demo app on its port', () => {
+    assert.equal(appUrl(buildConfig({ BASE_URL: 'https://app.example.com/' }, defaults)), 'https://app.example.com');
+    assert.equal(appUrl(buildConfig({ DEMO_APP_PORT: '5000' }, defaults)), 'http://127.0.0.1:5000');
 });
