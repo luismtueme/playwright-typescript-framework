@@ -37,6 +37,8 @@ export interface Exchange {
 }
 
 export interface ClientOptions {
+    /** Checks every response before anything else sees it; throw to fail the call (e.g. a contract check) */
+    validate?: ((response: { method: string; path: string; status: number; body: unknown }) => void) | undefined;
     /** Prefixes relative paths when it differs from the context's own baseURL */
     baseURL?: string | undefined;
     /** Receives every request/response pair (already redacted), e.g. to attach it to a report */
@@ -58,14 +60,16 @@ export class ApiClient {
     readonly context: APIRequestContext;
     readonly baseURL: string | undefined;
     private readonly onExchange: ClientOptions['onExchange'];
+    private readonly validate: ClientOptions['validate'];
     token: string | null = null;
     /** True when this client created the context and must dispose it */
     private ownsContext = false;
 
-    constructor(context: APIRequestContext, { baseURL, onExchange }: ClientOptions = {}) {
+    constructor(context: APIRequestContext, { baseURL, onExchange, validate }: ClientOptions = {}) {
         this.context = context;
         this.baseURL = baseURL;
         this.onExchange = onExchange;
+        this.validate = validate;
     }
 
     static async create({ baseURL, ...options }: ClientOptions & { baseURL: string }): Promise<ApiClient> {
@@ -125,6 +129,7 @@ export class ApiClient {
 
         const result: ApiResponse<T> = { status: response.status(), headers: response.headers(), body: body as T };
         log.debug(`${method} ${path} -> ${result.status}`);
+        this.validate?.({ method, path, status: result.status, body: result.body });
         if (this.onExchange) {
             await this.onExchange(
                 redact({ request: { method, path, params, headers: allHeaders, body: data }, response: result }),

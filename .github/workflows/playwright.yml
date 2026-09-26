@@ -47,6 +47,10 @@ jobs:
       - name: Type Check
         run: npm run typecheck
 
+      # Fails if contracts/openapi.d.ts wasn't regenerated after a contract change
+      - name: API Types Match the Contract
+        run: npm run check:api
+
       - name: Audit Dependencies (high and critical)
         run: npm audit --audit-level=high
 

@@ -29,17 +29,15 @@ import path from 'path';
 import crypto from 'crypto';
 import { config, DEMO_USERS, ROLES, type DbConfig, type Role } from '../config';
 import { DbClient, type Row } from '../utils/dbClient';
+import type { components } from '../contracts/openapi';
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const PAGES: Record<string, string> = { '/': 'index.html', '/login': 'login.html', '/items': 'items.html' };
 const PROTECTED_PAGES = new Set(['/items']);
 const SESSION_COOKIE = 'session';
 
-export interface Item {
-    id: number;
-    name: string;
-    createdAt: string;
-}
+/** The demo app implements the contract's types, so a contract change breaks its build too */
+export type Item = components['schemas']['Item'];
 
 /** A row of the `items` table as mysql2 returns it (TIMESTAMP columns become Date) */
 interface ItemRow extends Row {
@@ -61,9 +59,14 @@ export interface DemoApp {
     close(): Promise<void>;
 }
 
+/** Longest item name, matching the `items.name` VARCHAR(255) column and the contract */
+const MAX_NAME_LENGTH = 255;
+
+/** An error the client caused, sent with its status and error code */
 class HttpError extends Error {
     constructor(
         readonly status: number,
+        readonly code: string,
         message: string,
     ) {
         super(message);
@@ -148,7 +151,7 @@ function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
             try {
                 resolve(raw ? (JSON.parse(raw) as Record<string, unknown>) : {});
             } catch {
-                reject(new HttpError(400, 'Invalid JSON body'));
+                reject(new HttpError(400, 'INVALID_JSON', 'Invalid JSON body'));
             }
         });
         req.on('error', reject);
@@ -217,12 +220,23 @@ function createApp(store: Store) {
                 }
                 if (pathname === '/api/items' && req.method === 'POST') {
                     const { name } = await readJson(req);
-                    if (typeof name !== 'string' || name.trim() === '') {
+                    const trimmed = typeof name === 'string' ? name.trim() : '';
+                    if (trimmed === '') {
                         return send(res, 400, {
                             error: { code: 'VALIDATION_ERROR', field: 'name', message: 'Name is required' },
                         });
                     }
-                    return send(res, 201, await store.create(name.trim()));
+                    // Count characters (code points) like MySQL's VARCHAR(255), not UTF-16 units
+                    if ([...trimmed].length > MAX_NAME_LENGTH) {
+                        return send(res, 400, {
+                            error: {
+                                code: 'VALIDATION_ERROR',
+                                field: 'name',
+                                message: `Name must be ${MAX_NAME_LENGTH} characters or fewer`,
+                            },
+                        });
+                    }
+                    return send(res, 201, await store.create(trimmed));
                 }
                 if (!Number.isNaN(id) && req.method === 'GET') {
                     const item = await store.get(id);
@@ -237,8 +251,9 @@ function createApp(store: Store) {
             return send(res, 404, { error: { code: 'NOT_FOUND' } });
         } catch (caught) {
             const status = caught instanceof HttpError ? caught.status : 500;
+            const code = caught instanceof HttpError ? caught.code : 'SERVER_ERROR';
             const message = caught instanceof Error ? caught.message : String(caught);
-            return send(res, status, { error: { code: 'SERVER_ERROR', message } });
+            return send(res, status, { error: { code, message } });
         }
     };
 }

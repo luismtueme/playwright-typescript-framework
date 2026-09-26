@@ -6,6 +6,9 @@
 import { defineConfig, devices } from '@playwright/test';
 import { config } from './config';
 
+// One seed per run, set before workers start so they all inherit it (see utils/testData.ts)
+process.env.TEST_SEED ??= String(Math.floor(Math.random() * 2 ** 31));
+
 const DEVICES = { chromium: 'Desktop Chrome', firefox: 'Desktop Firefox', webkit: 'Desktop Safari' } as const;
 const baseURL = config.baseUrl || `http://127.0.0.1:${config.demoAppPort}`;
 

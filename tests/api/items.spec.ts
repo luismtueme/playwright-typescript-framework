@@ -19,6 +19,21 @@ test.describe('Items API', () => {
         expect(response.body).toMatchObject({ error: { code: 'VALIDATION_ERROR', field: 'name' } });
     });
 
+    test('rejects a body that is not JSON', async ({ authedApi }) => {
+        // A Buffer is sent as-is; a string would be serialized as a (valid) JSON string
+        const response = await authedApi.post('/api/items', Buffer.from('name=oops'), {
+            headers: { 'Content-Type': 'application/json' },
+        });
+        expect(response.status).toBe(400);
+        expect(response.body).toMatchObject({ error: { code: 'INVALID_JSON' } });
+    });
+
+    test('rejects a name longer than 255 characters', async ({ authedApi }) => {
+        const response = await authedApi.post('/api/items', { name: 'x'.repeat(256) });
+        expect(response.status).toBe(400);
+        expect(response.body).toMatchObject({ error: { code: 'VALIDATION_ERROR', field: 'name' } });
+    });
+
     test('rejects requests without a token', async ({ api }) => {
         const response = await api.get('/api/items');
         expect(response.status).toBe(401);

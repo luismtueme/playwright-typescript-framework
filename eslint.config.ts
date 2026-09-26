@@ -14,6 +14,8 @@ export default tseslint.config(
             '_site/',
             // Plain browser scripts served by the demo app
             'demo-app/public/',
+            // Generated from the OpenAPI contract
+            'contracts/openapi.d.ts',
         ],
     },
     js.configs.recommended,
@@ -56,7 +58,7 @@ export default tseslint.config(
             // Skipping is fine with a condition and reason (e.g. no database); a bare skip is not
             'playwright/no-skipped-test': ['error', { allowConditional: true }],
             // Fixtures that assert internally count as assertions
-            'playwright/expect-expect': ['error', { assertFunctionNames: ['checkAccessibility'] }],
+            'playwright/expect-expect': ['error', { assertFunctionNames: ['checkAccessibility', 'checkProperty'] }],
         },
     },
     {
