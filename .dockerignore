@@ -1,0 +1,11 @@
+node_modules
+.git
+.env
+.auth
+allure-results
+allure-report
+html-report
+test-results
+traces
+videos
+_site

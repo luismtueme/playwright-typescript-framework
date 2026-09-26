@@ -1,0 +1,41 @@
+# Full test environment: the suite plus a throwaway MySQL for @db scenarios.
+#
+#   docker compose run --rm tests            run everything
+#   docker compose run --rm tests npx playwright test --grep @smoke
+#   docker compose down -v                   remove the database afterwards
+#
+# Reports and artifacts are written back to ./allure-results, ./html-report,
+# ./traces and ./videos on your machine.
+services:
+  tests:
+    build: .
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      CI: 'true'
+      TEST_ENV: docker
+      DB_HOST: mysql
+      DB_PORT: '3306'
+      DB_USER: tester
+      DB_PASSWORD: tester-password
+      DB_NAME: testdb
+    ipc: host # recommended by Playwright for Chromium
+    volumes:
+      - ./allure-results:/app/allure-results
+      - ./html-report:/app/html-report
+      - ./traces:/app/traces
+      - ./videos:/app/videos
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root-password
+      MYSQL_DATABASE: testdb
+      MYSQL_USER: tester
+      MYSQL_PASSWORD: tester-password
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-uroot', '-proot-password']
+      interval: 5s
+      timeout: 5s
+      retries: 20

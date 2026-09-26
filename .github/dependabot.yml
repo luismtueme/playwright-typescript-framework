@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # npm dependencies: one grouped PR for minor/patch updates, majors stay separate
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Types must match the Node version CI runs (NODE_VERSION in the workflows).
+      # Bump this major together with NODE_VERSION.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      # typescript-eslint supports TypeScript < 6.1 today, so only patch updates are safe.
+      # Widen this when typescript-eslint's peer range does.
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+
+  # GitHub Actions used in .github/workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']

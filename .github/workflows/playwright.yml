@@ -1,0 +1,240 @@
+name: Playwright Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  # Uncomment to enable scheduled runs (daily at 4 AM UTC)
+  # schedule:
+  #   - cron: '0 4 * * *'
+
+# Least privilege by default; jobs that need more ask for it explicitly
+permissions:
+  contents: read
+
+# A newer push to the same PR cancels the older run; runs on main always finish
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: 22
+
+jobs:
+  # Fast gate: lint, dependency audit, framework unit tests, step and spec validation (no browser)
+  check:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Lint and Format Check
+        run: npm run lint
+
+      - name: Type Check
+        run: npm run typecheck
+
+      - name: Audit Dependencies (high and critical)
+        run: npm audit --audit-level=high
+
+      - name: Unit Tests (framework code)
+        run: npm run test:unit
+
+      - name: Validate Test Definitions
+        run: npm run check
+
+  test:
+    name: Tests
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # A real MySQL so the @db scenarios run; the demo app stores items in it
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root
+          MYSQL_DATABASE: testdb
+          MYSQL_USER: tester
+          MYSQL_PASSWORD: ci-password
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-root"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: true
+      TEST_ENV: ci
+      TEST_BROWSER: chromium
+      # Throwaway CI database. For a real app, read credentials from secrets:
+      #   APP_USERNAME: ${{ secrets.APP_USERNAME }}
+      #   APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: tester
+      DB_PASSWORD: ci-password
+      DB_NAME: testdb
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Install Playwright Browser
+        run: npx playwright install --with-deps ${{ env.TEST_BROWSER }}
+
+      - name: Run Playwright Tests
+        run: npx playwright test
+
+      # Flaky tests tagged @quarantine run here: results reach the report, but never fail the job
+      - name: Run Quarantined Tests (non-blocking)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: npm run test:quarantine
+
+      # Every test must delete what it creates; fails the job if rows are left behind
+      - name: Check for Leftover Test Data
+        if: ${{ !cancelled() }}
+        run: npm run check:leftovers
+
+      - name: Upload Test Artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-artifacts
+          path: |
+            traces/
+            videos/
+            test-results/
+            html-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Allure Results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: allure-results
+          path: allure-results/
+          include-hidden-files: true
+          retention-days: 14
+
+  # Screenshot comparison against tests/visual/__screenshots__, inside the Playwright
+  # Docker image so rendering matches the committed baselines exactly
+  visual:
+    name: Visual
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Visual Tests
+        run: npm run test:visual
+
+      # Expected, actual and diff images for every mismatch
+      - name: Upload Visual Diffs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-diffs
+          path: test-results/
+          retention-days: 14
+
+  # Publishes the Allure report to GitHub Pages, only for pushes to main (never for PRs)
+  report:
+    name: Publish Allure Report
+    needs: test
+    if: ${{ !cancelled() && needs.test.result != 'skipped' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}allure-report/
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Download Allure Results
+        uses: actions/download-artifact@v8
+        with:
+          name: allure-results
+          path: allure-results/
+
+      - name: Restore Allure History
+        uses: actions/cache/restore@v6
+        with:
+          path: allure-history
+          key: allure-history-${{ github.run_id }}
+          restore-keys: allure-history-
+
+      - name: Generate Allure Report
+        run: |
+          if [ -d allure-history ]; then
+            mkdir -p allure-results/history && cp -r allure-history/. allure-results/history/
+          fi
+          npx allure generate ./allure-results --clean -o ./_site/allure-report
+          # Carry trend history forward to the next run
+          rm -rf allure-history && cp -r ./_site/allure-report/history allure-history
+          # Site root redirects to the report
+          printf '<!DOCTYPE html><meta http-equiv="refresh" content="0; url=allure-report/"><a href="allure-report/">Allure report</a>\n' > ./_site/index.html
+
+      - name: Save Allure History
+        uses: actions/cache/save@v6
+        with:
+          path: allure-history
+          key: allure-history-${{ github.run_id }}
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./_site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

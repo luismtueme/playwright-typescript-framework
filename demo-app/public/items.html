@@ -1,0 +1,96 @@
+<!doctype html>
+<!--
+  Demo app: items page. Served by demo-app/server.js at "/items".
+  Requires a session cookie (set by logging in); otherwise redirects to /login.
+-->
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Items | Example Application</title>
+    </head>
+    <body>
+        <main>
+            <h1>Items</h1>
+
+            <form id="new-item-form" novalidate>
+                <label for="item-name">New item name</label>
+                <input id="item-name" name="name" type="text" />
+                <button type="submit">Add item</button>
+            </form>
+            <p id="item-error" role="alert"></p>
+            <p id="read-only" hidden>You have read-only access.</p>
+
+            <ul id="items" aria-label="Items"></ul>
+            <p id="empty" hidden>No items yet</p>
+
+            <p id="session-expired" hidden>
+                Your session has expired after 15 minutes of inactivity. <a href="/login?next=/items">Log in again</a>
+            </p>
+        </main>
+
+        <script>
+            const list = document.getElementById('items');
+
+            function render(items) {
+                list.replaceChildren(
+                    ...items.map((item) => {
+                        const li = document.createElement('li');
+                        li.textContent = item.name;
+                        li.dataset.id = item.id;
+                        return li;
+                    }),
+                );
+                document.getElementById('empty').hidden = items.length > 0;
+            }
+
+            async function load() {
+                const response = await fetch('/api/items');
+                render((await response.json()).items);
+            }
+
+            document.getElementById('new-item-form').addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const input = document.getElementById('item-name');
+                const error = document.getElementById('item-error');
+                const response = await fetch('/api/items', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: input.value }),
+                });
+                const body = await response.json();
+                error.textContent = response.ok ? '' : body.error.message;
+                if (response.ok) {
+                    input.value = '';
+                    await load();
+                }
+            });
+
+            load();
+
+            // Viewers can read but not add: the API returns 403, so hide the form
+            fetch('/api/me')
+                .then((response) => response.json())
+                .then((me) => {
+                    if (me.role !== 'admin') {
+                        document.getElementById('new-item-form').hidden = true;
+                        document.getElementById('read-only').hidden = false;
+                    }
+                });
+
+            // Client-side idle timeout: any click or keypress restarts the 15-minute timer.
+            // Tests control time with Playwright's page.clock instead of waiting.
+            const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+            let idleTimer;
+            function restartIdleTimer() {
+                clearTimeout(idleTimer);
+                idleTimer = setTimeout(() => {
+                    document.getElementById('new-item-form').hidden = true;
+                    document.getElementById('session-expired').hidden = false;
+                }, IDLE_TIMEOUT_MS);
+            }
+            document.addEventListener('click', restartIdleTimer);
+            document.addEventListener('keydown', restartIdleTimer);
+            restartIdleTimer();
+        </script>
+    </body>
+</html>

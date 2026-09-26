@@ -1,0 +1,5 @@
+# Keep LF line endings on every OS so Prettier's check gives the same result on Windows and CI
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.zip binary

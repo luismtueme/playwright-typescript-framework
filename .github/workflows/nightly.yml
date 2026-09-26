@@ -1,0 +1,91 @@
+name: Nightly Cross-Browser
+
+# Runs every test in Chromium, Firefox and WebKit. PRs stay on Chromium (fast);
+# this catches browser-specific breakage within a day. Not a required check.
+on:
+  schedule:
+    - cron: '0 6 * * *' # 06:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # Finish every browser even if one fails, to see the full picture
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root
+          MYSQL_DATABASE: testdb
+          MYSQL_USER: tester
+          MYSQL_PASSWORD: ci-password
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-root"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      CI: true
+      TEST_ENV: nightly
+      TEST_BROWSER: ${{ matrix.browser }}
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: tester
+      DB_PASSWORD: ci-password
+      DB_NAME: testdb
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Install Playwright Browser
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run Playwright Tests
+        run: npx playwright test
+
+      - name: Check for Leftover Test Data
+        if: ${{ !cancelled() }}
+        run: npm run check:leftovers
+
+      - name: Upload Allure Results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: allure-results-${{ matrix.browser }}
+          path: allure-results/
+          include-hidden-files: true
+          retention-days: 7
+
+      - name: Upload Test Artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-artifacts-${{ matrix.browser }}
+          path: |
+            traces/
+            videos/
+            test-results/
+            html-report/
+          if-no-files-found: ignore
+          retention-days: 7
