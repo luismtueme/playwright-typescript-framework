@@ -20,6 +20,11 @@
             <p id="item-error" role="alert"></p>
             <p id="read-only" hidden>You have read-only access.</p>
 
+            <p id="loading" hidden>Loading items…</p>
+            <div id="load-error" hidden>
+                <p>Could not load the items.</p>
+                <button type="button" id="retry">Try again</button>
+            </div>
             <ul id="items" aria-label="Items"></ul>
             <p id="empty" hidden>No items yet</p>
 
@@ -43,26 +48,49 @@
                 document.getElementById('empty').hidden = items.length > 0;
             }
 
+            // Network and server failures show a message instead of breaking the page
             async function load() {
-                const response = await fetch('/api/items');
-                render((await response.json()).items);
+                const loading = document.getElementById('loading');
+                const loadError = document.getElementById('load-error');
+                loading.hidden = false;
+                loadError.hidden = true;
+                try {
+                    const response = await fetch('/api/items');
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    render((await response.json()).items);
+                } catch {
+                    loadError.hidden = false;
+                } finally {
+                    loading.hidden = true;
+                }
             }
+            document.getElementById('retry').addEventListener('click', load);
 
+            const SAVE_FAILED = 'Could not save the item. Try again.';
             document.getElementById('new-item-form').addEventListener('submit', async (event) => {
                 event.preventDefault();
                 const input = document.getElementById('item-name');
                 const error = document.getElementById('item-error');
-                const response = await fetch('/api/items', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: input.value }),
-                });
-                const body = await response.json();
-                error.textContent = response.ok ? '' : body.error.message;
+                let response;
+                try {
+                    response = await fetch('/api/items', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: input.value }),
+                    });
+                } catch {
+                    error.textContent = SAVE_FAILED;
+                    return;
+                }
                 if (response.ok) {
+                    error.textContent = '';
                     input.value = '';
                     await load();
+                    return;
                 }
+                // 4xx messages are meant for the user; 5xx details are not
+                const body = await response.json().catch(() => null);
+                error.textContent = response.status < 500 && body?.error?.message ? body.error.message : SAVE_FAILED;
             });
 
             load();

@@ -9,3 +9,6 @@ videos/
 _site/
 # Markdown is hand-formatted
 *.md
+
+# Generated from contracts/openapi.yaml (npm run generate:api); checked by npm run check:api
+contracts/openapi.d.ts

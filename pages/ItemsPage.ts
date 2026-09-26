@@ -1,11 +1,9 @@
 import type { Locator, Page } from '@playwright/test';
+import type { components } from '../contracts/openapi';
 import { BasePage } from './BasePage';
 
-export interface Item {
-    id: number;
-    name: string;
-    createdAt: string;
-}
+/** An item as the API returns it; generated from the OpenAPI contract */
+export type Item = components['schemas']['Item'];
 
 /** Demo app items page ("/items"). Requires a logged-in session. */
 export class ItemsPage extends BasePage {
@@ -21,6 +19,11 @@ export class ItemsPage extends BasePage {
     readonly logInAgainLink: Locator;
     /** Shown instead of the add form to users without permission to change items */
     readonly readOnlyNotice: Locator;
+    /** Shown while the list is loading */
+    readonly loading: Locator;
+    /** Shown when the list couldn't be loaded, with a retry button */
+    readonly loadError: Locator;
+    readonly retryButton: Locator;
 
     /** Idle time after which the page shows the session-expired notice */
     static readonly IDLE_TIMEOUT = '15:00';
@@ -35,6 +38,9 @@ export class ItemsPage extends BasePage {
         this.sessionExpired = page.getByText('Your session has expired');
         this.logInAgainLink = page.getByRole('link', { name: 'Log in again' });
         this.readOnlyNotice = page.getByText('You have read-only access');
+        this.loading = page.getByText('Loading items…');
+        this.loadError = page.getByText('Could not load the items.');
+        this.retryButton = page.getByRole('button', { name: 'Try again' });
     }
 
     /** List entry for an item, located by its visible name. */

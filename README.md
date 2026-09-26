@@ -23,6 +23,10 @@ This is one of three versions of the same framework. They share the design, the 
 | UI tests | Page objects with role and label locators (`pages/`), Playwright auto-waiting, no hard-coded waits (enforced by lint) |
 | Roles | `test.use({ role: 'viewer' })` runs a test as that user. Each role logs in once per run; a permissions matrix checks every role against every API action |
 | API tests | Typed `ApiClient` on Playwright's request API: `api.post<Item>(...)` |
+| API contract | An OpenAPI document (`contracts/openapi.yaml`) is the source of truth. TypeScript types are generated from it, so an API change breaks compilation, and **every API response in every test**, from API clients and from the browser page, is checked against it at runtime |
+| Resilience | Network fault tests with `page.route`: server errors, dropped connections, slow responses, failed saves |
+| Generated inputs | Property-based tests (fast-check) state a rule and check it against many generated inputs, including unicode, emoji and edge lengths. They found a real bug in the demo app |
+| Reproducible data | Seeded, realistic test data. A failed test's report shows the seed; `TEST_SEED=...` reproduces it exactly |
 | Database checks | `DbClient` (MySQL, pooled, parameterized). `@db` tests verify what the API wrote; CI runs them against a real MySQL |
 | Test data | Factories with automatic cleanup (`createItem`, `trackItem`). CI fails if any rows are left behind |
 | Accessibility | axe-core checks every page against WCAG 2.1 A/AA, plus aria snapshots of each page's structure |
@@ -86,6 +90,8 @@ Settings are read in this order, first match wins: **environment variables**, th
 | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | unset | Enables the `@db` tests |
 | `TEST_ENV` | `local` | Environment label in the report |
 | `LOG_LEVEL` | `warn` locally, `info` in CI | `error`, `warn`, `info` or `debug` |
+| `OPENAPI_SPEC` | the demo app's contract | OpenAPI document (path or URL) that responses are checked against. For a real app, checks stay off until you set it |
+| `TEST_SEED` | new per run | Seed for generated data and property tests; copy it from a failed test's report to reproduce |
 
 Invalid values fail at startup with the variable name, for example `TEST_BROWSER must be one of chromium, firefox, webkit, got "ie11"`.
 
@@ -102,6 +108,8 @@ Invalid values fail at startup with the variable name, for example `TEST_BROWSER
 | `npm run test:quarantine` | Only `@quarantine` tests |
 | `npm run test:unit` | Unit tests for the framework code (`unit/`), failing below 90% line coverage |
 | `npm run check` | Lists every test (catches load errors) and runs the test policy lint |
+| `npm run generate:api` | Regenerates `contracts/openapi.d.ts` from the contract |
+| `npm run check:api` | Fails if the generated types are out of date (CI runs it) |
 | `npm run lint` / `npm run format` | ESLint and Prettier check / auto-fix |
 | `npm run typecheck` | Strict type check (no build step) |
 | `npm run demo` | Starts the demo app on http://127.0.0.1:4173 |
@@ -121,18 +129,24 @@ DB_HOST=127.0.0.1 DB_USER=tester DB_PASSWORD=tester DB_NAME=testdb npm test
 ├── config/
 │   ├── index.ts              # Loads and validates configuration, roles and credentials
 │   └── testConfig.json       # Non-secret defaults
+├── contracts/
+│   ├── openapi.yaml          # API contract: source of truth for types and response checks
+│   └── openapi.d.ts          # Generated types (npm run generate:api)
 ├── demo-app/                 # Example app under test (delete when you adopt the framework)
 ├── pages/                    # Page objects (BasePage, FormPage, LoginPage, ItemsPage)
 ├── tests/
 │   ├── fixtures.ts           # Custom fixtures: roles, page objects, API clients, test data
 │   ├── auth.setup.ts         # Logs in once per role and saves the sessions
-│   ├── ui/                   # Browser tests, including accessibility, roles and session timeout
-│   ├── api/                  # API tests and the permissions matrix
+│   ├── ui/                   # Browser tests: accessibility, roles, session timeout, network faults
+│   ├── api/                  # API tests, permissions matrix, generated-input tests
 │   ├── db/                   # Database checks (skip without DB_HOST)
 │   └── visual/               # Screenshot tests and committed baselines (__screenshots__/)
 ├── unit/                     # Unit tests for the framework itself (node:test)
 ├── utils/
 │   ├── apiClient.ts          # HTTP client (Playwright request API)
+│   ├── contract.ts           # Validates responses against the OpenAPI contract
+│   ├── generateApiTypes.ts   # Generates and checks contracts/openapi.d.ts
+│   ├── testData.ts           # Seeded random data (TEST_SEED)
 │   ├── dbClient.ts           # MySQL client
 │   ├── authState.ts          # Where each role's saved session lives
 │   ├── accessibility.ts      # axe-core WCAG checks
@@ -198,6 +212,9 @@ test.describe('as a visitor', () => {
 | `credentials` | `{ username, password }` of the test's role |
 | `checkAccessibility(options?)` | Runs axe on the page, attaches the results, fails on any violation |
 | `db` | `DbClient` (worker-scoped); use only in tests that skip without a database |
+| `random` | This test's seeded generator; its seed is recorded in the report |
+| `checkProperty(inputs, rule)` | Runs a property-based check, seeded from the test |
+| `contract` (option) | Contract checks on every response (default); `test.use({ contract: false })` for tests that fake responses |
 
 ### Roles and permissions
 
@@ -275,6 +292,44 @@ Locator assertions retry on their own. For API or database values, `expect.poll(
 await expect.poll(() => db.count('items', 'id = ?', [item.id])).toBe(0);
 ```
 
+### API contract
+
+`contracts/openapi.yaml` describes every endpoint, status and response body, and its response schemas forbid undocumented fields. Two things follow from it:
+
+- **Types.** `npm run generate:api` writes `contracts/openapi.d.ts`, and the tests and the demo app use those types (`components['schemas']['Item']`). Renaming a field in the contract breaks compilation wherever the old name is used. CI fails if the generated file is stale.
+- **Runtime checks.** The fixtures validate every API response against the contract: from `api`, `authedApi` and `apiAs()`, and from the browser page's own requests. An undocumented status, a missing or extra field, or a wrong type fails the test that received it, naming the exact problem:
+
+```
+ContractViolation: API response does not match the contract:
+  - GET /api/items/{id} -> 200: body must NOT have additional properties (secret)
+```
+
+For your app, set `OPENAPI_SPEC` to its OpenAPI document (file or URL); `npm run generate:api` reads the same variable.
+
+### Network faults
+
+`page.route` intercepts the page's requests, so failures are exact and repeatable. `tests/ui/network-faults.spec.ts` covers a server error with retry, a dropped connection, a slow response (held until the test releases it) and a failed save. Faked responses aren't in the contract, so those tests use `test.use({ contract: false })`.
+
+### Generated inputs (property-based tests)
+
+Instead of a few chosen examples, state the rule and let fast-check generate the inputs:
+
+```typescript
+test('any name is either saved trimmed or rejected with 400, never a server error', async ({ authedApi, trackItem, checkProperty }) => {
+    await checkProperty(names, (name) => checkName(authedApi, trackItem, name));
+});
+```
+
+A failure is shrunk to the smallest input that still fails, and reproduces with the test's seed. On its first run, this test found that the demo app accepted names over 255 characters: the contract check flagged it with the in-memory store, and with MySQL the same input caused a 500.
+
+### Reproducible test data
+
+Every run has one seed (`TEST_SEED`, or a new one per run), and each test gets its own generator from it through the `random` fixture. `createItem()` uses it for realistic names like "Lateral 214 CCTV survey". The seed is in every test's report annotations; re-run with it to get exactly the same data:
+
+```bash
+TEST_SEED=28259670 npx playwright test tests/ui/items.spec.ts
+```
+
 ### Visual comparison
 
 Specs in `tests/visual/` compare screenshots with baselines in `tests/visual/__screenshots__/`. They run only through `npm run test:visual`, which uses the Playwright Docker image so fonts and anti-aliasing match everywhere (running them outside Docker is refused). After an intended UI change, run `npm run test:visual -- --update` and review the new images in the PR. Mask anything that changes between runs with `mask: [locator]`.
@@ -301,7 +356,7 @@ In CI, the Allure report for every push to `main` is published to GitHub Pages. 
 
 | Job | Runs |
 |---|---|
-| Checks | Lint and format, type check, `npm audit` (high and critical), unit tests with coverage thresholds, test list and policy lint |
+| Checks | Lint and format, type check, API types match the contract, `npm audit` (high and critical), unit tests with coverage thresholds, test list and policy lint |
 | Tests | Every spec against the demo app, backed by a MySQL service container. Then quarantined tests (non-blocking) and a check that no test data was left behind |
 | Visual | Screenshot comparison in the Playwright Docker image. Uploads expected/actual/diff images on failure |
 | Publish Allure Report | On `main` only: builds the report and deploys it to GitHub Pages |

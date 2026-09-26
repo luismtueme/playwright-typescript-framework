@@ -40,6 +40,13 @@ Or run everything in Docker, MySQL included: `docker compose run --rm tests`.
 - Skip only with a condition and a reason (`test.skip(!config.db, '...')`); lint rejects bare skips.
 - Credentials and other secrets come from environment variables, never from committed files.
 
+**API contract**
+- Change the API in `contracts/openapi.yaml` first, then run `npm run generate:api` and commit both files. CI fails if the generated types are stale.
+- Tests that fake responses (`page.route`) opt out with `test.use({ contract: false })`; everything else is checked against the contract.
+
+**Test data**
+- Use the `random` fixture (or `createItem()`) for generated values, not `Math.random()`, so a failure reproduces with its seed.
+
 **Flaky tests**
 - Don't retry your way past a flaky test. Quarantine it with a ticket, fix the cause, and remove the tag:
   `{ tag: '@quarantine', annotation: { type: 'issue', description: 'ABC-123' } }`.

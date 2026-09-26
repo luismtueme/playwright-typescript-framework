@@ -9,12 +9,20 @@
  *
  *   test.use({ role: 'viewer' });     // read-only user
  *   test.use({ role: 'anonymous' });  // a visitor with no session
+ *
+ * Every API response (from the API clients and from the browser page) is checked
+ * against the OpenAPI contract. Turn that off only for tests that fake responses:
+ *
+ *   test.use({ contract: false });
  */
-import { test as base, expect } from '@playwright/test';
+import { test as base, expect, type Response } from '@playwright/test';
+import fc from 'fast-check';
 import { config, requireCredentials, type Credentials, type Role } from '../config';
-import { ApiClient } from '../utils/apiClient';
+import { ApiClient, type ClientOptions } from '../utils/apiClient';
+import { Contract, ContractViolation } from '../utils/contract';
 import { DbClient } from '../utils/dbClient';
 import { authFile } from '../utils/authState';
+import { Random, RUN_SEED, itemName, seedFor } from '../utils/testData';
 import { FormPage } from '../pages/FormPage';
 import { LoginPage } from '../pages/LoginPage';
 import { ItemsPage, type Item } from '../pages/ItemsPage';
@@ -26,11 +34,15 @@ export const LOGGED_OUT = { cookies: [], origins: [] };
 export interface Options {
     /** Who the browser is logged in as. `anonymous` means no session. */
     role: Role | 'anonymous';
+    /** Check every API response against the OpenAPI contract (default: true when a contract is configured) */
+    contract: boolean;
 }
 
 export interface WorkerFixtures {
     /** MySQL client, one pool per worker. Only for tests that skip without a database (see tests/db). */
     db: DbClient;
+    /** The parsed OpenAPI contract, or null when none is configured */
+    apiContract: Contract | null;
 }
 
 export interface Fixtures {
@@ -45,12 +57,25 @@ export interface Fixtures {
     authedApi: ApiClient;
     /** API client logged in as any role; clients are disposed after the test */
     apiAs: (role: Role) => Promise<ApiClient>;
+    /** This test's seeded random generator; its seed is recorded in the report */
+    random: Random;
     /** Deletes an item after the test (pass or fail); for items created outside createItem */
     trackItem: (item: { id: number }) => void;
-    /** Creates an item through the API and deletes it after the test */
+    /** Creates an item through the API (realistic seeded name by default) and deletes it after the test */
     createItem: (overrides?: { name?: string }) => Promise<Item>;
     /** Runs axe on the current page, attaches the results, and fails on any violation */
     checkAccessibility: (options?: AccessibilityOptions) => Promise<void>;
+    /**
+     * Checks a rule against generated inputs (fast-check), seeded from the test's seed so
+     * failures reproduce with TEST_SEED. A failure reports the smallest failing input.
+     */
+    checkProperty: <T>(
+        inputs: fc.Arbitrary<T>,
+        rule: (input: T) => Promise<void>,
+        options?: { runs?: number },
+    ) => Promise<void>;
+    /** Internal: checks the browser page's API responses against the contract */
+    pageContractCheck: void;
 }
 
 export const test = base.extend<Fixtures & Options, WorkerFixtures>({
@@ -63,7 +88,15 @@ export const test = base.extend<Fixtures & Options, WorkerFixtures>({
         { scope: 'worker' },
     ],
 
+    apiContract: [
+        async ({}, use) => {
+            await use(config.openApiSpec ? new Contract(config.openApiSpec) : null);
+        },
+        { scope: 'worker' },
+    ],
+
     role: ['admin', { option: true }],
+    contract: [true, { option: true }],
 
     // Load the saved session for the test's role
     storageState: async ({ role }, use) => {
@@ -72,6 +105,12 @@ export const test = base.extend<Fixtures & Options, WorkerFixtures>({
 
     credentials: async ({ role }, use) => {
         await use(requireCredentials(config, role === 'anonymous' ? 'admin' : role));
+    },
+
+    random: async ({}, use, testInfo) => {
+        const seed = seedFor(testInfo.titlePath.join(' › '));
+        testInfo.annotations.push({ type: 'seed', description: `TEST_SEED=${RUN_SEED} (test seed ${seed})` });
+        await use(new Random(seed));
     },
 
     formPage: async ({ page }, use) => {
@@ -95,17 +134,71 @@ export const test = base.extend<Fixtures & Options, WorkerFixtures>({
         });
     },
 
-    api: async ({ playwright, baseURL }, use) => {
+    checkProperty: async ({ random }, use) => {
+        await use(async (inputs, rule, { runs = 80 } = {}) => {
+            await fc.assert(fc.asyncProperty(inputs, rule), { numRuns: runs, seed: random.seed });
+        });
+    },
+
+    // Checks the browser page's own API calls too; a violation fails the test at the end
+    pageContractCheck: [
+        async ({ page, apiContract, contract, baseURL }, use, testInfo) => {
+            if (!apiContract || !contract) return use();
+            const problems: string[] = [];
+            const pending: Array<Promise<void>> = [];
+            const origin = new URL(config.apiBaseUrl || baseURL || 'http://localhost').origin;
+            const onResponse = (response: Response) => {
+                const url = new URL(response.url());
+                if (url.origin !== origin || !url.pathname.startsWith('/api/')) return;
+                pending.push(
+                    (async () => {
+                        // The body is gone if the page navigated away first; the status is still checked
+                        const text = await response.text().catch(() => undefined);
+                        let body: unknown = text || null;
+                        try {
+                            body = text ? JSON.parse(text) : null;
+                        } catch {
+                            // not JSON: validated as text
+                        }
+                        const method = response.request().method();
+                        problems.push(
+                            ...apiContract.check({
+                                method,
+                                path: url.pathname,
+                                status: response.status(),
+                                body,
+                                bodyUnavailable: text === undefined,
+                            }),
+                        );
+                    })(),
+                );
+            };
+            page.on('response', onResponse);
+            await use();
+            page.off('response', onResponse);
+            await Promise.all(pending);
+            if (problems.length > 0) {
+                await testInfo.attach('contract-violations.txt', {
+                    body: problems.join('\n'),
+                    contentType: 'text/plain',
+                });
+                throw new ContractViolation(problems);
+            }
+        },
+        { auto: true },
+    ],
+
+    api: async ({ playwright, baseURL, apiContract, contract }, use) => {
         const context = await playwright.request.newContext({
             baseURL: config.apiBaseUrl || baseURL,
             // Playwright applies the test's storageState to new request contexts too
             storageState: LOGGED_OUT,
         });
-        await use(new ApiClient(context));
+        await use(new ApiClient(context, contractOptions(apiContract, contract)));
         await context.dispose();
     },
 
-    apiAs: async ({ playwright, baseURL }, use) => {
+    apiAs: async ({ playwright, baseURL, apiContract, contract }, use) => {
         const contexts: Array<{ dispose: () => Promise<void> }> = [];
         await use(async (role) => {
             const context = await playwright.request.newContext({
@@ -113,7 +206,7 @@ export const test = base.extend<Fixtures & Options, WorkerFixtures>({
                 storageState: LOGGED_OUT,
             });
             contexts.push(context);
-            const api = new ApiClient(context);
+            const api = new ApiClient(context, contractOptions(apiContract, contract));
             const { username, password } = requireCredentials(config, role);
             await api.login(username, password);
             return api;
@@ -137,16 +230,26 @@ export const test = base.extend<Fixtures & Options, WorkerFixtures>({
         }
     },
 
-    createItem: async ({ authedApi, trackItem }, use) => {
+    createItem: async ({ authedApi, trackItem, random }, use) => {
         await use(async (overrides = {}) => {
-            const name = overrides.name ?? `Test item ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-            const response = await authedApi.post<Item>('/api/items', { name, ...overrides });
+            const response = await authedApi.post<Item>('/api/items', { name: itemName(random), ...overrides });
             if (response.status !== 201) throw new Error(`createItem failed: HTTP ${response.status}`);
             trackItem(response.body);
             return response.body;
         });
     },
 });
+
+/** ApiClient options that validate every response against the contract */
+function contractOptions(apiContract: Contract | null, enabled: boolean): ClientOptions {
+    if (!apiContract || !enabled) return {};
+    return {
+        validate: (response) => {
+            const problems = apiContract.check(response);
+            if (problems.length > 0) throw new ContractViolation(problems);
+        },
+    };
+}
 
 export { expect };
 

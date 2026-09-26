@@ -4,6 +4,22 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-26
+
+### Added
+- API contract: `contracts/openapi.yaml` (OpenAPI 3.1) for the demo app, with strict response schemas.
+- Generated API types (`npm run generate:api`, `contracts/openapi.d.ts`), used by the tests and the demo app; `npm run check:api` in CI fails when they're stale.
+- Runtime contract checks on every API response, from the API clients and from the browser page (`utils/contract.ts`). `test.use({ contract: false })` opts out for faked responses; `OPENAPI_SPEC` points the checks at your own app's contract.
+- Network fault tests (`tests/ui/network-faults.spec.ts`): server error with retry, dropped connection, slow response, failed save.
+- Property-based tests with fast-check (`tests/api/items.properties.spec.ts`) and a `checkProperty` fixture seeded from the test.
+- Seeded, realistic test data (`utils/testData.ts`, `random` fixture); one `TEST_SEED` per run, recorded on every test.
+- Unit tests for the contract validator and the seeded generator.
+
+### Fixed (demo app, found by the new tests)
+- Names longer than 255 characters were accepted (and made MySQL return a 500); they now get a 400. Found by the property-based test.
+- An invalid JSON body returned `SERVER_ERROR`; it now returns `INVALID_JSON`. Found while writing the contract.
+- The items page broke on network or server errors; it now shows a loading state, an error with retry, and a plain save-failed message.
+
 ## [1.0.0] - 2026-09-26
 
 Spec-only version of [playwright-cucumber-typescript-framework v1.1.0](https://github.com/luismtueme/playwright-cucumber-typescript-framework/releases/tag/v1.1.0): the same design, demo app and CI gates, with Playwright specs as the only way to write tests. The history of the shared features is in that repository's changelog.
@@ -19,5 +35,6 @@ Spec-only version of [playwright-cucumber-typescript-framework v1.1.0](https://g
 ### Removed
 - Cucumber: feature files, step definitions, hooks, the World, `cucumber.mts`, the step validator, the Gherkin linter and the pinned `@cucumber/*` packages. Every scenario already had a matching spec except the two database scenarios, which are now specs.
 
-[Unreleased]: https://github.com/luismtueme/playwright-typescript-framework/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/luismtueme/playwright-typescript-framework/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/luismtueme/playwright-typescript-framework/releases/tag/v1.1.0
 [1.0.0]: https://github.com/luismtueme/playwright-typescript-framework/releases/tag/v1.0.0

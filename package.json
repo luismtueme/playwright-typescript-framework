@@ -1,6 +1,6 @@
 {
   "name": "playwright-typescript-framework",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Playwright test automation framework in strict TypeScript: UI, API, database, accessibility and visual testing, role-based users and Allure reporting",
   "license": "MIT",
@@ -17,7 +17,7 @@
   },
   "scripts": {
     "test": "npm run clean && playwright test",
-    "test:unit": "node --import tsx --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=85 --test-coverage-include=\"config/**\" --test-coverage-include=\"utils/apiClient.ts\" --test-coverage-include=\"utils/logger.ts\" --test-coverage-include=\"utils/allureCategories.ts\" --test-coverage-include=\"utils/lintTests.ts\" --test-coverage-include=\"demo-app/server.ts\" \"unit/*.test.ts\"",
+    "test:unit": "node --import tsx --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=85 --test-coverage-include=\"config/**\" --test-coverage-include=\"utils/apiClient.ts\" --test-coverage-include=\"utils/logger.ts\" --test-coverage-include=\"utils/allureCategories.ts\" --test-coverage-include=\"utils/lintTests.ts\" --test-coverage-include=\"utils/contract.ts\" --test-coverage-include=\"utils/testData.ts\" --test-coverage-include=\"demo-app/server.ts\" \"unit/*.test.ts\"",
     "test:visual": "tsx utils/visual.ts",
     "test:quarantine": "tsx utils/runQuarantine.ts",
     "check": "playwright test --list && npm run -s lint:tests",
@@ -28,23 +28,35 @@
     "format": "prettier --write . && eslint --fix .",
     "clean": "tsx utils/allureMetadata.ts clean",
     "demo": "tsx demo-app/server.ts",
-    "report": "allure generate allure-results --clean -o allure-report && allure open allure-report"
+    "report": "allure generate allure-results --clean -o allure-report && allure open allure-report",
+    "generate:api": "tsx utils/generateApiTypes.ts",
+    "check:api": "tsx utils/generateApiTypes.ts --check"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.48.1",
     "@types/node": "^22.20.4",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "allure-commandline": "^2.46.1",
     "allure-playwright": "^3.0.5",
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-playwright": "^2.12.0",
+    "fast-check": "^4.10.2",
     "jiti": "^2.7.0",
     "mysql2": "^3.11.3",
+    "openapi-typescript": "^7.13.0",
     "prettier": "^3.9.9",
     "tsx": "^4.23.15",
     "typescript": "~6.0",
-    "typescript-eslint": "^8.70.1"
+    "typescript-eslint": "^8.70.1",
+    "yaml": "^2.9.1"
+  },
+  "overrides": {
+    "openapi-typescript": {
+      "typescript": "$typescript"
+    }
   }
 }
