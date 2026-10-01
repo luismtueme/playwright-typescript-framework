@@ -8,13 +8,14 @@ Tests are plain Playwright specs (`*.spec.ts`). Page objects, API clients, test 
 
 ## Which repo should I use?
 
-This is one of three versions of the same framework. They share the design, the demo app and the CI gates.
+This is one of four versions of the same framework. They share the design and the demo app, and the three Playwright versions also share the CI gates.
 
 | Repository | Tests are written as | Language | Choose it when |
 |---|---|---|---|
 | **playwright-typescript-framework** (this one) | Playwright specs | TypeScript | Engineers write and read the tests. The most features and the simplest toolchain |
 | [playwright-cucumber-typescript-framework](https://github.com/luismtueme/playwright-cucumber-typescript-framework) | Gherkin scenarios and Playwright specs | TypeScript | Product owners, analysts or manual QA read or write scenarios in Given/When/Then |
 | [playwright-cucumber-automation-framework](https://github.com/luismtueme/playwright-cucumber-automation-framework) | Gherkin scenarios and Playwright specs | JavaScript (type-checked with JSDoc) | You want Cucumber without a TypeScript toolchain |
+| [selenium-java-cucumber-framework](https://github.com/luismtueme/selenium-java-cucumber-framework) | Gherkin scenarios | Java (Selenium WebDriver) | Your team works in Java, or needs Selenium: a Selenium Grid or WebDriver-based tooling |
 
 ## What's included
 
