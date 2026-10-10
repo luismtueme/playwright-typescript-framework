@@ -38,15 +38,15 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
-    "@playwright/test": "^1.48.1",
-    "@types/node": "^22.20.4",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^22.20.5",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "allure-commandline": "^2.46.1",
     "allure-playwright": "^3.13.0",
-    "eslint": "^10.11.0",
+    "eslint": "^10.12.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-playwright": "^2.12.0",
+    "eslint-plugin-playwright": "^2.12.1",
     "fast-check": "^4.10.2",
     "jiti": "^2.7.0",
     "mysql2": "^3.24.5",
@@ -54,7 +54,7 @@
     "prettier": "^3.9.9",
     "tsx": "^4.23.15",
     "typescript": "~6.0",
-    "typescript-eslint": "^8.71.0",
+    "typescript-eslint": "^8.71.1",
     "yaml": "^2.9.1"
   },
   "overrides": {
