@@ -8,14 +8,16 @@ Tests are plain Playwright specs (`*.spec.ts`). Page objects, API clients, test 
 
 ## Which repo should I use?
 
-This is one of four versions of the same framework. They share the design and the demo app, and the three Playwright versions also share the CI gates.
+This is one of six frameworks.
 
 | Repository | Tests are written as | Language | Choose it when |
 |---|---|---|---|
 | **playwright-typescript-framework** (this one) | Playwright specs | TypeScript | Engineers write and read the tests. The most features and the simplest toolchain |
 | [playwright-cucumber-typescript-framework](https://github.com/luismtueme/playwright-cucumber-typescript-framework) | Gherkin scenarios and Playwright specs | TypeScript | Product owners, analysts or manual QA read or write scenarios in Given/When/Then |
 | [playwright-cucumber-automation-framework](https://github.com/luismtueme/playwright-cucumber-automation-framework) | Gherkin scenarios and Playwright specs | JavaScript (type-checked with JSDoc) | You want Cucumber without a TypeScript toolchain |
+| [playwright-python-framework](https://github.com/luismtueme/playwright-python-framework) | Pytest | Python | The same Playwright checks, without Node |
 | [selenium-java-cucumber-framework](https://github.com/luismtueme/selenium-java-cucumber-framework) | Gherkin scenarios | Java (Selenium WebDriver) | Your team works in Java, or needs Selenium: a Selenium Grid or WebDriver-based tooling |
+| [appium-java-cucumber-framework](https://github.com/luismtueme/appium-java-cucumber-framework) | Gherkin scenarios and JUnit specs | Java (Appium) | Native Android and iOS |
 
 ## What's included
 
@@ -422,7 +424,8 @@ In CI, the Allure report for every push to `main` is published to GitHub Pages. 
 | Tests | Merges the shard reports into one HTML report, writes the results summary to the job and as a PR comment (updated on each push), and fails if any shard failed |
 | Visual | Screenshot comparison in the Playwright Docker image. Uploads expected/actual/diff images on failure |
 | Publish Allure Report | On `main` only: builds the report and deploys it to GitHub Pages |
-| Nightly Cross-Browser | Daily at 06:00 UTC (and on demand): everything on Chromium, Firefox and WebKit. Not required to merge |
+
+`.github/workflows/nightly.yml` is a separate workflow. It runs daily at 06:00 UTC and on demand: the suite on Chromium, Firefox, and WebKit. It does not run on pull requests, and it is not required to merge.
 
 `main` is protected: changes need a PR with Checks, Burn-in, Tests and Visual passing. Dependabot opens weekly update PRs. See [.github/GITHUB_ACTIONS_GUIDE.md](.github/GITHUB_ACTIONS_GUIDE.md) for setup in your own repository.
 
