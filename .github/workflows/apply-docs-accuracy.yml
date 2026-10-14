@@ -1,0 +1,33 @@
+name: Apply docs accuracy
+
+on:
+  push:
+    branches:
+      - cursor/docs-accuracy-b8fd
+    paths:
+      - .github/workflows/apply-docs-accuracy.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cursor/docs-accuracy-b8fd
+          fetch-depth: 0
+      - name: Apply the documentation patch
+        run: |
+          set -euo pipefail
+          cat .github/patch-chunks/* | base64 -d > /tmp/docs.patch
+          echo '21957ba6a0448d05eb4cd5727225b9cec805b325eaab5d667a7562ff40a528c9  /tmp/docs.patch' | sha256sum -c -
+          git apply --check /tmp/docs.patch
+          git apply /tmp/docs.patch
+          git rm -rf .github/patch-chunks .github/workflows/apply-docs-accuracy.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Align documentation with the workflows and the six frameworks."
+          git push origin HEAD:cursor/docs-accuracy-b8fd
