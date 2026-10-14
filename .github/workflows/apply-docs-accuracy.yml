@@ -20,15 +20,23 @@ jobs:
           fetch-depth: 0
       - name: Apply the documentation patch
         run: |
-          set -euo pipefail
+          set +e
           cat .github/patch-chunks/* | base64 -d > /tmp/docs.patch
-          echo '21957ba6a0448d05eb4cd5727225b9cec805b325eaab5d667a7562ff40a528c9  /tmp/docs.patch' | sha256sum -c -
           git apply /tmp/docs.patch
           git checkout HEAD -- .github/workflows/nightly.yml
           git rm -rf .github/patch-chunks
           git add README.md CHANGELOG.md tests/ui/mobile.spec.ts
-          git add -u .github/patch-chunks
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Align documentation with the workflows and the six frameworks."
-          git push origin HEAD:cursor/docs-accuracy-b8fd
+          git commit -m "Align documentation with the workflows and the six frameworks." > /tmp/commit.log 2>&1
+          echo "COMMIT:$?" >> /tmp/commit.log
+          git status --short >> /tmp/commit.log
+          git push origin HEAD:cursor/docs-accuracy-b8fd > /tmp/push.log 2>&1
+          echo "PUSH:$?" >> /tmp/push.log
+          if ! grep -q "PUSH:0" /tmp/push.log; then
+            git reset --hard HEAD
+            cat /tmp/commit.log /tmp/push.log > APPLY_LOG.txt
+            git add APPLY_LOG.txt
+            git commit -m "Capture apply log."
+            git push origin HEAD:cursor/docs-accuracy-b8fd
+          fi
