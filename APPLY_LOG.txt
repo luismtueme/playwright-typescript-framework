@@ -1,0 +1,25 @@
+chunks:
+total 32
+drwxr-xr-x 2 runner runner 4096 Oct 14 19:19 .
+drwxr-xr-x 4 runner runner 4096 Oct 14 19:19 ..
+-rw-r--r-- 1 runner runner 1500 Oct 14 19:19 0
+-rw-r--r-- 1 runner runner 1500 Oct 14 19:19 1
+-rw-r--r-- 1 runner runner 1500 Oct 14 19:19 2
+-rw-r--r-- 1 runner runner 1500 Oct 14 19:19 3
+-rw-r--r-- 1 runner runner 1500 Oct 14 19:19 4
+-rw-r--r-- 1 runner runner 1496 Oct 14 19:19 5
+DECODE:0
+21957ba6a0448d05eb4cd5727225b9cec805b325eaab5d667a7562ff40a528c9  /tmp/docs.patch
+/tmp/docs.patch: OK
+SHA:0
+CHECK:0
+APPLY:0
+ M .github/workflows/nightly.yml
+ M CHANGELOG.md
+ M README.md
+ M tests/ui/mobile.spec.ts
+ .github/workflows/nightly.yml | 21 +++++----------------
+ CHANGELOG.md                  |  1 +
+ README.md                     |  7 +++++--
+ tests/ui/mobile.spec.ts       |  3 +--
+ 4 files changed, 12 insertions(+), 20 deletions(-)
