@@ -9,6 +9,7 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 - Device projects set `screen: undefined`. Playwright 1.64 forwards `screen` from device descriptors, which would change `window.screen` and the visual baselines.
 
 ### Changed
+- README: the CI section no longer says the suite runs on Pixel 7 and iPhone 15. The pull-request phone check is a phone-width layout test.
 - README: the "Which repo should I use?" table links the new Java and Selenium version, [selenium-java-cucumber-framework](https://github.com/luismtueme/selenium-java-cucumber-framework).
 
 ## [1.3.0] - 2026-09-26

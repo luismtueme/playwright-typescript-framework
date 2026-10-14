@@ -29,7 +29,7 @@ This is one of four versions of the same framework. They share the design and th
 | Generated inputs | Property-based tests (fast-check) state a rule and check it against many generated inputs, including unicode, emoji and edge lengths. They found a real bug in the demo app |
 | Reproducible data | Seeded, realistic test data. A failed test's report shows the seed; `TEST_SEED=...` reproduces it exactly |
 | Performance budgets | Each page's load metrics (navigation timing, LCP, CLS) must stay within `config/performanceBudgets.json`; the measured numbers are attached to every test |
-| Phones | Nightly runs repeat the suite on Pixel 7 and iPhone 15 profiles (viewport, touch, mobile user agent), and visual baselines exist per viewport. A PR test checks every page lays out at phone width |
+| Phones | A PR test checks every page lays out at phone width. Visual baselines exist per viewport |
 | Productivity | `npm run new:page` scaffolds a page object, fixture, spec and accessibility check that pass lint; `npm run codegen` records from a logged-in session; Playwright's AI test agents (planner, generator, healer) are set up to follow this framework's conventions |
 | Fast, trustworthy CI | New and changed tests run 10 times before merging (burn-in); the suite is sharded across machines with one merged report; every PR gets a results summary comment |
 | Database checks | `DbClient` (MySQL, pooled, parameterized). `@db` tests verify what the API wrote; CI runs them against a real MySQL |
@@ -422,7 +422,7 @@ In CI, the Allure report for every push to `main` is published to GitHub Pages. 
 | Tests | Merges the shard reports into one HTML report, writes the results summary to the job and as a PR comment (updated on each push), and fails if any shard failed |
 | Visual | Screenshot comparison in the Playwright Docker image. Uploads expected/actual/diff images on failure |
 | Publish Allure Report | On `main` only: builds the report and deploys it to GitHub Pages |
-| Nightly Cross-Browser | Daily at 06:00 UTC (and on demand): everything on Chromium, Firefox and WebKit, and on Pixel 7 and iPhone 15 profiles. Not required to merge |
+| Nightly Cross-Browser | Daily at 06:00 UTC (and on demand): everything on Chromium, Firefox and WebKit. Not required to merge |
 
 `main` is protected: changes need a PR with Checks, Burn-in, Tests and Visual passing. Dependabot opens weekly update PRs. See [.github/GITHUB_ACTIONS_GUIDE.md](.github/GITHUB_ACTIONS_GUIDE.md) for setup in your own repository.
 
