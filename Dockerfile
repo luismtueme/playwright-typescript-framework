@@ -5,7 +5,7 @@
 #   docker compose run --build --rm tests npm run check   any npm script
 #
 # Keep the image tag in step with @playwright/test in package.json.
-FROM mcr.microsoft.com/playwright:v1.63.0-noble
+FROM mcr.microsoft.com/playwright:v1.64.0-noble
 
 WORKDIR /app
 
