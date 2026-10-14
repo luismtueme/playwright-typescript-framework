@@ -2,8 +2,7 @@ import { test, expect } from '../fixtures';
 import type { Page } from '@playwright/test';
 
 // Without <meta name="viewport">, phones lay pages out 980px wide and shrink them to fit,
-// so text is unreadably small. Runs on every PR; the nightly run repeats the whole suite
-// on real device profiles (TEST_DEVICE).
+// so text is unreadably small. Runs on every PR at a fixed phone width.
 const PHONE = { width: 390, height: 844 };
 
 async function expectFitsPhone(page: Page) {
