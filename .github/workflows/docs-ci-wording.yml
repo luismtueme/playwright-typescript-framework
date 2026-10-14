@@ -1,0 +1,50 @@
+name: Correct CI wording
+
+on:
+  push:
+    branches: [cursor/ci-docs-b8fd]
+    paths: [.github/workflows/docs-ci-wording.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cursor/ci-docs-b8fd
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update the CI wording
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          edits = {
+              "README.md": [
+                  ("| Phones | Nightly runs repeat the suite on Pixel 7 and iPhone 15 profiles (viewport, touch, mobile user agent), and visual baselines exist per viewport. A PR test checks every page lays out at phone width |", "| Phones | A PR test checks every page lays out at phone width. Visual baselines exist per viewport |"),
+                  ("| Nightly Cross-Browser | Daily at 06:00 UTC (and on demand): everything on Chromium, Firefox and WebKit, and on Pixel 7 and iPhone 15 profiles. Not required to merge |", "| Nightly Cross-Browser | Daily at 06:00 UTC (and on demand): everything on Chromium, Firefox and WebKit. Not required to merge |"),
+              ],
+              ".github/GITHUB_ACTIONS_GUIDE.md": [
+                  ("Runs every test on Chromium, Firefox and WebKit, and on Pixel 7 (Chromium) and iPhone 15 (WebKit) device profiles, every day at 06:00 UTC and on demand from the Actions tab. Each is a separate job, and all finish even if one fails. Allure results are uploaded per job. Each matrix entry has a unique `name`: an `include` entry that only adds a key (such as `device`) would otherwise be merged into the existing job for its browser. It isn't a required check: PRs stay on desktop Chromium for speed, and this catches browser- and device-specific breakage within a day. To be notified, enable failed-workflow emails for scheduled runs in your GitHub notification settings.", "Runs every test on Chromium, Firefox and WebKit, every day at 06:00 UTC and on demand from the Actions tab. Each browser is a separate job, and all finish even if one fails. Allure results are uploaded per job. It isn't a required check: PRs stay on desktop Chromium for speed, and this catches browser-specific breakage within a day. To be notified, enable failed-workflow emails for scheduled runs in your GitHub notification settings."),
+              ],
+              "CHANGELOG.md": [
+                  ("### Changed\n- README: the \"Which repo should I use?\" table links the new Java and Selenium version, [selenium-java-cucumber-framework](https://github.com/luismtueme/selenium-java-cucumber-framework).", "### Changed\n- README: the CI section no longer says the suite runs on Pixel 7 and iPhone 15. The pull-request phone check is a phone-width layout test.\n- README: the \"Which repo should I use?\" table links the new Java and Selenium version, [selenium-java-cucumber-framework](https://github.com/luismtueme/selenium-java-cucumber-framework)."),
+              ],
+          }
+          for rel, reps in edits.items():
+              path = Path(rel)
+              text = path.read_text()
+              for old, new in reps:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f"{rel} count {count}")
+                  text = text.replace(old, new, 1)
+              path.write_text(text)
+          print("updated")
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md CHANGELOG.md .github/GITHUB_ACTIONS_GUIDE.md
+          git commit -m "Stop saying the suite runs on Pixel 7 and iPhone 15."
+          git push origin HEAD:cursor/ci-docs-b8fd
