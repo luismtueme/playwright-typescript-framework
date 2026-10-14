@@ -1,0 +1,95 @@
+name: Lock Playwright 1.64
+
+# One-shot helper. It patches package-lock.json to the already-installed 1.64.0
+# bytes and pushes that commit, then this file is removed.
+on:
+  push:
+    branches: [cursor/playwright-1-64-b8fd]
+    paths: [.github/workflows/lock-playwright-164.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: cursor/playwright-1-64-b8fd
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Patch package-lock.json
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          path = Path("package-lock.json")
+          text = path.read_text()
+          replacements = [
+              (
+                  '        "@playwright/test": "^1.48.1",',
+                  '        "@playwright/test": "^1.64.0",',
+              ),
+              (
+                  """    \"node_modules/@playwright/test\": {
+            \"version\": \"1.63.0\",
+            \"resolved\": \"https://registry.npmjs.org/@playwright/test/-/test-1.63.0.tgz\",
+            \"integrity\": \"sha512-oxMK4vllB9RK5NQ2l1pq1IfOf2AvnEuj/vYGDj0H2nMtmtZpKtCwt/l00GEO6xjGfpBNAvjovvYdCm50dRQkpQ==\",
+            \"dev\": true,
+            \"license\": \"Apache-2.0\",
+            \"dependencies\": {
+              \"playwright\": \"1.63.0\"
+            },""",
+                  """    \"node_modules/@playwright/test\": {
+            \"version\": \"1.64.0\",
+            \"resolved\": \"https://registry.npmjs.org/@playwright/test/-/test-1.64.0.tgz\",
+            \"integrity\": \"sha512-oTN9FNYuN6bqQMwiho6jJKLCG2/QOYCixGXuCjRmzOq23eODeukuY2XiAVoVpAECbuezMt1MHQjAiQxK8F+Y+g==\",
+            \"dev\": true,
+            \"license\": \"Apache-2.0\",
+            \"dependencies\": {
+              \"playwright\": \"1.64.0\"
+            },""",
+              ),
+              (
+                  """    \"node_modules/playwright\": {
+            \"version\": \"1.63.0\",
+            \"resolved\": \"https://registry.npmjs.org/playwright/-/playwright-1.63.0.tgz\",
+            \"integrity\": \"sha512-+7ziBLidS4NaNCdt57SUDT+wYmmd5fmiQejUic/kb+YsYSCPyOOE9sebzMjNmQrsnNpDJqd4WHvV/8lfKfUDUg==\",
+            \"dev\": true,
+            \"license\": \"Apache-2.0\",
+            \"dependencies\": {
+              \"playwright-core\": \"1.63.0\"
+            },""",
+                  """    \"node_modules/playwright\": {
+            \"version\": \"1.64.0\",
+            \"resolved\": \"https://registry.npmjs.org/playwright/-/playwright-1.64.0.tgz\",
+            \"integrity\": \"sha512-kVzTnYFYEyQ9RGzBjNCd2+yEqWmVbxl3AHPynv3qQ6JTjv4a+kwRcnqQwIpuP3NnrnIrE/Q6wWAIAvMfIE2/Yg==\",
+            \"dev\": true,
+            \"license\": \"Apache-2.0\",
+            \"dependencies\": {
+              \"playwright-core\": \"1.64.0\"
+            },""",
+              ),
+              (
+                  """    \"node_modules/playwright-core\": {
+            \"version\": \"1.63.0\",
+            \"resolved\": \"https://registry.npmjs.org/playwright-core/-/playwright-core-1.63.0.tgz\",
+            \"integrity\": \"sha512-rYCsBF/M5HjUch52bbtVONEFjv6Xu8sm8h72dNlR5bzIE1fvC/bxgspzkjSfU+MweEMmPM8KJebG6nnyxo5mCg==\",""",
+                  """    \"node_modules/playwright-core\": {
+            \"version\": \"1.64.0\",
+            \"resolved\": \"https://registry.npmjs.org/playwright-core/-/playwright-core-1.64.0.tgz\",
+            \"integrity\": \"sha512-T9r+MZkTECl2+oUcZ26YgZzTrYidTsIhYYkJix+6iDOymOb1FB2RLLSOxRGnZGv5DStt+aduIVbt+E8WygXYpg==\",""",
+              ),
+          ]
+          for index, (old, new) in enumerate(replacements):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"block {index} count {count}")
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          print("patched", len(text.encode()))
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "Lock @playwright/test at 1.64.0."
+          git push origin HEAD:cursor/playwright-1-64-b8fd
