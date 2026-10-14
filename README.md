@@ -324,6 +324,30 @@ Locator assertions retry on their own. For API or database values, `expect.poll(
 await expect.poll(() => db.count('items', 'id = ?', [item.id])).toBe(0);
 ```
 
+### Playwright 1.64
+
+`@playwright/test` is 1.64. The pieces this framework uses:
+
+**A locator inside another locator.** `locator.within()` keeps relative locators (`nth`, `first`) inside each parent, so the third cell of every row is not the third cell of the table:
+
+```typescript
+const thirdColumn = page.getByRole('cell').nth(2).within(page.getByRole('row'));
+await expect(thirdColumn).toHaveText(['Apple', 'Banana', 'Cherry']);
+
+const save = page.getByRole('button', { name: 'Save' });
+await save.within(page.getByRole('dialog')).click();
+```
+
+`tests/ui/library-1-64.spec.ts` covers that, plus `page.getByRef()` (the `e2` ref from `ariaSnapshot({ mode: 'ai' })`), cookies on the API request context (`request.addCookies` / `cookies` / `clearCookies`), and `page.content({ includeShadow: true })`.
+
+**Page tools (WebMCP).** Experimental. Chromium needs `--enable-features=WebMCP`. `tests/ui/webmcp.spec.ts` launches its own browser with that flag, lists the tool the page registers, and calls it. The rest of the suite does not turn the flag on. Firefox and WebKit skip the example.
+
+**Device screen.** 1.64 copies `screen` out of `devices['Desktop Chrome']` and the phone descriptors, which changes `window.screen` and media queries. `playwright.config.ts` sets `screen: undefined` after the spread so the visual baselines stay the ones captured without that emulation. Do not switch `toHaveScreenshot` to WebP; the committed baselines are PNG.
+
+**Video.** `video` can be an object with `mode`, `size`, `fps` (Firefox and WebKit cap at 25), and CSS for the action point, highlight, and title. `fontSize` is deprecated. This framework still takes the string mode from config (`retain-on-failure`). New recordings are VP9.
+
+**Order, projects, and locks.** `testProject.default: false` and `--project=*` fit a config that lists every browser. This one picks the browser with `TEST_BROWSER`, so the projects stay as they are. `--shuffle` and `--shuffle <seed>` randomize order; CI does not use them, so a required run stays in a stable order. `test.describe.configure({ lock: 'name' })` keeps tests that share a resource from running at the same time. Nothing here needs a lock yet.
+
 ### API contract
 
 `contracts/openapi.yaml` describes every endpoint, status and response body, and its response schemas forbid undocumented fields. Two things follow from it:

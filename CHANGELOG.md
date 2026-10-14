@@ -4,6 +4,10 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+- Playwright 1.64. `locator.within()`, `page.getByRef()`, request-context cookies, and shadow DOM in `page.content()` are covered in `tests/ui/library-1-64.spec.ts`. An experimental WebMCP example launches Chromium with `--enable-features=WebMCP` (`tests/ui/webmcp.spec.ts`) and does not change the rest of the suite.
+- Device projects set `screen: undefined`. Playwright 1.64 forwards `screen` from device descriptors, which would change `window.screen` and the visual baselines.
+
 ### Changed
 - README: the "Which repo should I use?" table links the new Java and Selenium version, [selenium-java-cucumber-framework](https://github.com/luismtueme/selenium-java-cucumber-framework).
 
