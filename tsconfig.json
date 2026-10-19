@@ -17,5 +17,5 @@
     "types": ["node"]
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "allure-results", "allure-report", "html-report", "test-results"]
+  "exclude": ["node_modules", "allure-results", "allure-report", "html-report", "test-results", "playpress-report"]
 }

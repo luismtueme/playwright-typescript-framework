@@ -28,8 +28,9 @@ const quote = (arg: string) => `'${arg.replace(/'/g, `'\\''`)}'`;
 // installs its own node_modules into a Docker volume; your local folder is untouched.
 const useContainerModules = process.platform !== 'linux';
 const playwrightTest = `node node_modules/@playwright/test/cli.js test ${args.map(quote).join(' ')}`;
+// scripts/npm-ci.sh rewrites GitHub SSH to HTTPS before installing. playpress is a git dependency.
 const command = useContainerModules
-    ? ['sh', '-c', `npm ci --no-audit --no-fund --loglevel=error && ${playwrightTest}`]
+    ? ['sh', '-c', `bash scripts/npm-ci.sh --no-audit --no-fund --loglevel=error && ${playwrightTest}`]
     : ['sh', '-c', playwrightTest];
 
 const docker = [

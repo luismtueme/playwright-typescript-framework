@@ -71,10 +71,14 @@ export default defineConfig({
         // Docker renders identically every run, so the tolerance can be near zero
         toHaveScreenshot: { maxDiffPixels: 10, animations: 'disabled' },
     },
-    // CI shards write blob reports that the merge job combines into one HTML and JSON report
+    // CI shards write blob reports that the merge job combines into one HTML and JSON report.
+    // playpress writes report.json beside them. Publishing stays off in the test run: each shard
+    // would publish a partial document. The default-branch job unions the shard documents and
+    // publishes the redacted site.
     reporter: [
         ['list'],
         ['allure-playwright'],
+        ['playpress', { publish: false }],
         config.blobReport
             ? ['blob', { outputDir: 'blob-report' }]
             : ['html', { outputFolder: 'html-report', open: 'never' }],
