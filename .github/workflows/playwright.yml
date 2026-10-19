@@ -21,6 +21,8 @@ concurrency:
 
 env:
   NODE_VERSION: 22
+  # Shards must not publish. The deploy job runs the publisher on the merged document.
+  PLAYPRESS_PUBLISH: 'false'
 
 jobs:
   # Fast gate: lint, dependency audit, framework unit tests, step and spec validation (no browser)
@@ -39,7 +41,7 @@ jobs:
           cache: npm
 
       - name: Install Dependencies
-        run: npm ci
+        run: bash scripts/npm-ci.sh
 
       - name: Lint and Format Check
         run: npm run lint
@@ -104,7 +106,7 @@ jobs:
           cache: npm
 
       - name: Install Dependencies
-        run: npm ci
+        run: bash scripts/npm-ci.sh
 
       - name: Install Playwright Browser
         run: npx playwright install --with-deps ${{ env.TEST_BROWSER }}
@@ -180,7 +182,7 @@ jobs:
           cache: npm
 
       - name: Install Dependencies
-        run: npm ci
+        run: bash scripts/npm-ci.sh
 
       - name: Install Playwright Browser
         run: npx playwright install --with-deps ${{ env.TEST_BROWSER }}
@@ -188,15 +190,36 @@ jobs:
       - name: Run Playwright Tests
         run: npx playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
+      # Upload before quarantine: that step is a second Playwright run and would overwrite this directory
+      - name: Upload Playpress Shard Report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playpress-shard-${{ matrix.shard }}
+          path: playpress-report/
+          if-no-files-found: error
+          retention-days: 3
+
       # Flaky tests tagged @quarantine run here (once, in shard 1): results reach the
       # report, but never fail the job
       - name: Run Quarantined Tests (non-blocking)
         if: ${{ !cancelled() && matrix.shard == 1 }}
         continue-on-error: true
-        # Not a blob: that would overwrite this shard's blob report
+        # Not a blob: that would overwrite this shard's blob report. A separate
+        # playpress directory so the shard document uploaded above stays intact.
         env:
           BLOB_REPORT: false
+          PLAYPRESS_OUTPUT_DIR: playpress-report-quarantine
         run: npm run test:quarantine
+
+      - name: Upload Playpress Quarantine Report
+        if: ${{ !cancelled() && matrix.shard == 1 }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playpress-report-quarantine
+          path: playpress-report-quarantine/
+          if-no-files-found: ignore
+          retention-days: 3
 
       # Every test must delete what it creates; fails the job if rows are left behind
       - name: Check for Leftover Test Data
@@ -254,7 +277,7 @@ jobs:
           cache: npm
 
       - name: Install Dependencies
-        run: npm ci
+        run: bash scripts/npm-ci.sh
 
       - name: Download Blob Reports
         uses: actions/download-artifact@v8
@@ -277,6 +300,74 @@ jobs:
           LISTED=$(npx playwright test --list | grep -oE 'Total: [0-9]+' | grep -oE '[0-9]+')
           npx tsx utils/prSummary.ts playwright-report.json --listed-tests="$LISTED" | tee summary.md >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Download Playpress Shard Reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: playpress-shard-*
+          path: playpress-shards
+
+      - name: Download Playpress Quarantine Report
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: playpress-report-quarantine
+          path: playpress-quarantine
+
+      # One full document for the artifact. Profile full keeps error text and media;
+      # the file is not deployed. The default-branch job publishes it redacted.
+      - name: Union Playpress Reports
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          args=()
+          for report in playpress-shards/*/report.json; do
+            args+=(--report "$report")
+          done
+          if [ -f playpress-quarantine/report.json ]; then
+            args+=(--report playpress-quarantine/report.json)
+          fi
+          if [ "${#args[@]}" -eq 0 ]; then
+            echo "playpress: no shard report was downloaded"
+            exit 1
+          fi
+          npx playpress publish "${args[@]}" --site playpress-union --profile full
+          mapfile -t runs < <(find playpress-union/runs -mindepth 1 -maxdepth 1 -type d | sort)
+          if [ "${#runs[@]}" -ne 1 ]; then
+            echo "playpress: expected one unioned run, found ${#runs[@]}"
+            exit 1
+          fi
+          rm -rf playpress-report
+          mkdir -p playpress-report
+          cp "${runs[0]}/report.json" playpress-report/report.json
+          if [ -d "${runs[0]}/media" ]; then
+            cp -a "${runs[0]}/media" playpress-report/media
+          fi
+
+      - name: Write Playpress Summary
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          export GIT_TERMINAL_PROMPT=0
+          base_args=()
+          if git fetch --depth=1 origin playpress-history; then
+            catalog="${RUNNER_TEMP}/playpress-catalog.json"
+            git show "origin/playpress-history:catalog.json" > "$catalog"
+            rel=$(npx tsx utils/playpressSummary.ts --print-base "$catalog" playpress-report/report.json --branch "$DEFAULT_BRANCH")
+            if [ -n "$rel" ]; then
+              base="${RUNNER_TEMP}/playpress-base.json"
+              git show "origin/playpress-history:${rel}" > "$base"
+              base_args=(--base "$base")
+            fi
+          fi
+          deploy_args=()
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/${DEFAULT_BRANCH}" ]; then
+            deploy_args=(--deploys)
+          fi
+          npx tsx utils/playpressSummary.ts playpress-report/report.json --branch "$DEFAULT_BRANCH" "${base_args[@]}" "${deploy_args[@]}" | tee -a summary.md >> "$GITHUB_STEP_SUMMARY"
+
       # Updates the bot's previous summary comment instead of adding one per push.
       # Skipped for forks and Dependabot, whose tokens can't comment.
       - name: Comment Summary on the PR
@@ -294,6 +385,17 @@ jobs:
         with:
           name: html-report
           path: html-report/
+          retention-days: 14
+
+      # Full document: error text and media. Pull requests stop here. Pushes to the
+      # default branch publish a redacted copy from the deploy job.
+      - name: Upload Playpress Report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playpress-report
+          path: playpress-report/
+          if-no-files-found: error
           retention-days: 14
 
       - name: Fail if Any Shard Failed
@@ -320,7 +422,7 @@ jobs:
           cache: npm
 
       - name: Install Dependencies
-        run: npm ci
+        run: bash scripts/npm-ci.sh
 
       - name: Run Visual Tests
         run: npm run test:visual
@@ -334,22 +436,32 @@ jobs:
           path: test-results/
           retention-days: 14
 
-  # Publishes the Allure report to GitHub Pages, only for pushes to main (never for PRs)
+      - name: Upload Playpress Report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playpress-report-visual
+          path: playpress-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Pushes to the default branch only. Pull requests upload playpress-report and do not deploy.
+  # History lives on the orphan branch playpress-history, rewritten only by this job.
   report:
-    name: Publish Allure Report
+    name: Publish Reports
     needs: test
-    if: ${{ !cancelled() && needs.test.result != 'skipped' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    if: ${{ !cancelled() && needs.test.result != 'skipped' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: read
+      contents: write
       pages: write
       id-token: write
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}allure-report/
+      url: ${{ steps.deployment.outputs.page_url }}
     concurrency:
-      group: pages
+      group: playpress-pages
       cancel-in-progress: false
     steps:
       - name: Checkout Repository
@@ -362,7 +474,7 @@ jobs:
           cache: npm
 
       - name: Install Dependencies
-        run: npm ci
+        run: bash scripts/npm-ci.sh
 
       - name: Download Allure Results (all shards)
         uses: actions/download-artifact@v8
@@ -379,21 +491,83 @@ jobs:
           restore-keys: allure-history-
 
       - name: Generate Allure Report
+        id: allure
+        continue-on-error: true
         run: |
           if [ -d allure-history ]; then
             mkdir -p allure-results/history && cp -r allure-history/. allure-results/history/
           fi
-          npx allure generate ./allure-results --clean -o ./_site/allure-report
-          # Carry trend history forward to the next run
-          rm -rf allure-history && cp -r ./_site/allure-report/history allure-history
-          # Site root redirects to the report
-          printf '<!DOCTYPE html><meta http-equiv="refresh" content="0; url=allure-report/"><a href="allure-report/">Allure report</a>\n' > ./_site/index.html
+          npx allure generate ./allure-results --clean -o ./allure-report
+          rm -rf allure-history && cp -r ./allure-report/history allure-history
 
       - name: Save Allure History
+        if: steps.allure.outcome == 'success'
         uses: actions/cache/save@v6
         with:
           path: allure-history
           key: allure-history-${{ github.run_id }}
+
+      - name: Download Playpress Report
+        uses: actions/download-artifact@v8
+        with:
+          name: playpress-report
+          path: playpress-report
+
+      # First deploy creates the orphan branch. Later deploys start from its tip.
+      - name: Check out the history branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch=playpress-history
+          site=site
+          rm -rf "$site"
+          git worktree prune
+          git fetch origin "$branch" || true
+          if git rev-parse --verify --quiet "refs/remotes/origin/${branch}" >/dev/null; then
+            git worktree add "$site" "origin/${branch}"
+          else
+            git worktree add --detach "$site"
+            git -C "$site" checkout --orphan "$branch"
+            git -C "$site" rm -rf . >/dev/null 2>&1 || true
+            find "$site" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          fi
+
+      - name: Publish the redacted profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          media_args=()
+          if [ -d playpress-report/media ]; then
+            media_args=(--media playpress-report/media)
+          fi
+          npx playpress publish --report playpress-report/report.json "${media_args[@]}" --site site --profile redacted
+
+      - name: Push the history branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C site add -A
+          if git -C site diff --cached --quiet; then
+            echo "playpress site has no changes"
+            exit 0
+          fi
+          git -C site \
+            -c user.name=github-actions[bot] \
+            -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
+            commit -m "Publish playpress run"
+          git -C site push origin HEAD:playpress-history
+
+      # Allure is copied after the push, so the history branch stays the playpress archive.
+      - name: Assemble the Pages site
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp -a site/. _site/
+          rm -f _site/.git
+          if [ -d allure-report ]; then
+            cp -a allure-report _site/allure-report
+          fi
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v5
