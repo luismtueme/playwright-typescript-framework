@@ -1,6 +1,6 @@
 /**
  * Runs only @quarantine tests. CI runs this without blocking merges, so flaky
- * tests keep reporting (in Allure and the run log) while they're being fixed.
+ * tests keep reporting (in Allure, playpress and the run log) while they're being fixed.
  *
  * Quarantine a flaky test with a ticket; `npm run lint:tests` enforces the ticket:
  *   test('...', { tag: '@quarantine', annotation: { type: 'issue', description: 'ABC-123' } }, ...)

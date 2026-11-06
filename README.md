@@ -1,10 +1,10 @@
 # Playwright TypeScript Framework
 
-UI, API, database, accessibility and visual test automation with [Playwright Test](https://playwright.dev), in strict TypeScript, reported in [Allure](https://allurereport.org).
+UI, API, database, accessibility and visual test automation with [Playwright Test](https://playwright.dev), in strict TypeScript, reported in [Allure](https://allurereport.org) and [playpress](https://github.com/luismtueme/playpress).
 
 Tests are plain Playwright specs (`*.spec.ts`). Page objects, API clients, test data and logged-in users are injected as fixtures, so a test reads as the behavior it checks.
 
-[![Playwright Tests](https://github.com/luismtueme/playwright-typescript-framework/actions/workflows/playwright.yml/badge.svg)](https://github.com/luismtueme/playwright-typescript-framework/actions/workflows/playwright.yml) · [Latest Allure report](https://luismtueme.github.io/playwright-typescript-framework/allure-report/)
+[![Playwright Tests](https://github.com/luismtueme/playwright-typescript-framework/actions/workflows/playwright.yml/badge.svg)](https://github.com/luismtueme/playwright-typescript-framework/actions/workflows/playwright.yml) · [Playpress archive](https://luismtueme.github.io/playwright-typescript-framework/) · [Latest Allure report](https://luismtueme.github.io/playwright-typescript-framework/allure-report/)
 
 ## Which repo should I use?
 
@@ -408,9 +408,10 @@ Specs in `tests/visual/` compare screenshots with baselines in `tests/visual/__s
 ## Reporting
 
 - **Playwright HTML report** (`html-report/`): every test with its steps, errors, screenshots, videos and traces. Open traces with `npx playwright show-trace <file>.zip`, or at [trace.playwright.dev](https://trace.playwright.dev).
-- **Allure** (`npm run report`): the same, plus trend history and failure categories (Application Bug, Flaky Test, Test Defect, Infrastructure).
+- **playpress** (`playpress-report/report.json`, and `playpress-report/media/` when a run kept screenshots, video, or traces): one versioned document for the run. `npm test` writes it and does not publish. On CI the shard documents are unioned into that directory.
+- **Allure** (`npm run report`): the same run, plus trend history and failure categories (Application Bug, Flaky Test, Test Defect, Infrastructure).
 
-In CI, the Allure report for every push to `main` is published to GitHub Pages. For PRs, download the `allure-results` and `test-artifacts` artifacts from the run.
+Every pull request uploads `playpress-report` (the document and the media folder) for 14 days and writes a job summary. It does not deploy GitHub Pages. A push to `main` publishes the redacted profile: counts, status, duration, title, file, project, commit, branch, and the workflow link. Error text and media stay in the artifact. History is the orphan branch `playpress-history`, updated only by that deploy, then uploaded with `actions/upload-pages-artifact` and `actions/deploy-pages`. The site root is the playpress catalog. Allure stays at `/allure-report/`.
 
 ## CI
 
@@ -421,9 +422,9 @@ In CI, the Allure report for every push to `main` is published to GitHub Pages. 
 | Checks | Lint and format, type check, API types match the contract, `npm audit` (high and critical), unit tests with coverage thresholds, test list and policy lint |
 | Burn-in | PRs only. The tests affected by the PR (`--only-changed`, which follows imports) run once for fast feedback, then 10 more times without retries. A test that fails once is flaky, and doesn't merge |
 | Tests (shard 1/2, 2/2) | The full suite split across two machines, each with its own MySQL. Then quarantined tests (non-blocking) and a check that no test data was left behind |
-| Tests | Merges the shard reports into one HTML report, writes the results summary to the job and as a PR comment (updated on each push), and fails if any shard failed |
-| Visual | Screenshot comparison in the Playwright Docker image. Uploads expected/actual/diff images on failure |
-| Publish Allure Report | On `main` only: builds the report and deploys it to GitHub Pages |
+| Tests | Merges the shard reports into one HTML report and one playpress document, writes both summaries to the job and as a PR comment (updated on each push), uploads `playpress-report` for 14 days, and fails if any shard failed |
+| Visual | Screenshot comparison in the Playwright Docker image. Uploads expected/actual/diff images on failure, and the playpress document for that run |
+| Publish Reports | On `main` only: publishes the redacted playpress archive and the Allure report to GitHub Pages |
 
 `.github/workflows/nightly.yml` is a separate workflow. It runs daily at 06:00 UTC and on demand: the suite on Chromium, Firefox, and WebKit. It does not run on pull requests, and it is not required to merge.
 

@@ -14,11 +14,11 @@ Automated testing workflow that runs on every pull request to `main`, every push
 | `Checks` | PRs and pushes | ESLint and Prettier, strict type check, `npm audit --audit-level=high`, framework unit tests with coverage thresholds, test list and policy lint (allowed tags, quarantine tickets) |
 | `Burn-in` | PRs only | Tests affected by the PR (`--only-changed=origin/<base>`), once and then 10 times with no retries. Needs full git history (`fetch-depth: 0`) |
 | `Tests (shard N/2)` | PRs and pushes | The suite split across machines (`--shard`), each with a MySQL service container, writing blob reports. Then `@quarantine` tests (shard 1, non-blocking) and the leftover-data check |
-| `Tests` | PRs and pushes | Merges the blob reports (HTML + JSON), writes the results summary to the job summary and as a PR comment, and fails if any shard failed |
-| `Visual` | PRs and pushes | Screenshot comparison inside the Playwright Docker image (`npm run test:visual`). Uploads expected/actual/diff images on failure |
-| `Publish Allure Report` | Pushes to `main` only | Builds the Allure report (with trend history) and deploys it to GitHub Pages |
+| `Tests` | PRs and pushes | Merges the blob reports (HTML + JSON) and the playpress shard documents, writes both summaries to the job summary and as a PR comment, uploads `report.json` and `media/` for 14 days, and fails if any shard failed. Does not deploy Pages |
+| `Visual` | PRs and pushes | Screenshot comparison inside the Playwright Docker image (`npm run test:visual`). Uploads expected/actual/diff images on failure, and the playpress document |
+| `Publish Reports` | Pushes to `main` only | Publishes the redacted playpress archive from the orphan branch `playpress-history`, keeps Allure at `/allure-report/`, and deploys once with `actions/upload-pages-artifact` and `actions/deploy-pages` |
 
-`Checks`, `Burn-in`, `Tests` and `Visual` are the required status checks for merging into `main`. `Burn-in` is skipped on pushes to `main`, which GitHub counts as passing. To shard further, add numbers to the `test-shard` job's `matrix.shard`; the shard count follows automatically. PR runs never publish a report and need no secrets.
+`Checks`, `Burn-in`, `Tests` and `Visual` are the required status checks for merging into `main`. `Burn-in` is skipped on pushes to `main`, which GitHub counts as passing. To shard further, add numbers to the `test-shard` job's `matrix.shard`; the shard count follows automatically. PR runs upload the playpress document and need no secrets. They do not deploy Pages.
 
 ### `nightly.yml`
 Runs every test on Chromium, Firefox and WebKit, every day at 06:00 UTC and on demand from the Actions tab. Each browser is a separate job, and all finish even if one fails. Allure results are uploaded per job. It isn't a required check: PRs stay on desktop Chromium for speed, and this catches browser-specific breakage within a day. To be notified, enable failed-workflow emails for scheduled runs in your GitHub notification settings.
@@ -28,12 +28,13 @@ Opens weekly PRs for npm and GitHub Actions updates. Minor and patch npm updates
 
 ## 🚀 **Setup Instructions**
 
-### 1. **Enable GitHub Pages** (for Allure reports)
+### 1. **Enable GitHub Pages** (playpress archive and Allure)
 1. Go to your repository Settings
 2. Navigate to Pages section
 3. Set Source to "GitHub Actions"
+4. Allow the `github-pages` environment to deploy from your default branch
 
-No personal access token is needed. The workflow deploys with the built-in `GITHUB_TOKEN`.
+No personal access token is needed. The workflow deploys with the built-in `GITHUB_TOKEN`. The deploy job needs `contents: write` so it can update the orphan branch `playpress-history`. Pull requests never deploy.
 
 ### 2. **Point the Tests at Your Application**
 The examples run against the bundled demo app (`demo-app/`), which the tests start automatically, so the pipeline is green out of the box. To test your real app, set these in the `Tests` job's `env`, with credentials stored as repository secrets (Settings → Secrets and variables → Actions):
@@ -82,6 +83,8 @@ schedule:
 ## 📊 **Reports**
 
 After each workflow run:
+- **playpress** (every run): download the `playpress-report` artifact (`report.json` and `media/`) from the run summary. It is kept for 14 days. Pull requests do not publish it.
+- **playpress archive** (pushes to `main`): `https://yourusername.github.io/your-repo-name/` — redacted catalog. Error text and media are not on the site.
 - **Allure Report** (pushes to `main`): `https://yourusername.github.io/your-repo-name/allure-report/`
 - **Test Artifacts** (every run): videos, traces, screenshots and the Playwright HTML report, downloadable from the run summary for 14 days
 - **Workflow Logs**: Available in the Actions tab of your repository

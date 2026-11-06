@@ -12,6 +12,9 @@ export default tseslint.config(
             'html-report/',
             'test-results/',
             '_site/',
+            'playpress-report/',
+            'playpress-union/',
+            'site/',
             // Plain browser scripts served by the demo app
             'demo-app/public/',
             // Generated from the OpenAPI contract

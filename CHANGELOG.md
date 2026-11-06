@@ -5,6 +5,7 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 ## [Unreleased]
 
 ### Added
+- playpress records every Playwright run as `playpress-report/report.json`. Pull requests upload that document and its media for 14 days and write a job summary. Pushes to `main` publish the redacted archive on GitHub Pages from the `playpress-history` branch.
 - Playwright 1.64. `locator.within()`, `page.getByRef()`, request-context cookies, and shadow DOM in `page.content()` are covered in `tests/ui/library-1-64.spec.ts`. An experimental WebMCP example launches Chromium with `--enable-features=WebMCP` (`tests/ui/webmcp.spec.ts`) and does not change the rest of the suite.
 - Device projects set `screen: undefined`. Playwright 1.64 forwards `screen` from device descriptors, which would change `window.screen` and the visual baselines.
 

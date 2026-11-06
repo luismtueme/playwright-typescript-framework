@@ -5,7 +5,7 @@
 #   docker compose down -v                   remove the database afterwards
 #
 # Reports and artifacts are written back to ./allure-results, ./html-report,
-# ./traces and ./videos on your machine.
+# ./playpress-report, ./traces and ./videos on your machine.
 services:
   tests:
     build: .
@@ -24,6 +24,7 @@ services:
     volumes:
       - ./allure-results:/app/allure-results
       - ./html-report:/app/html-report
+      - ./playpress-report:/app/playpress-report
       - ./traces:/app/traces
       - ./videos:/app/videos
 

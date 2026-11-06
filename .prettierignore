@@ -7,6 +7,9 @@ test-results/
 traces/
 videos/
 _site/
+playpress-report/
+playpress-union/
+site/
 # Markdown is hand-formatted
 *.md
 

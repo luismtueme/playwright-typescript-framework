@@ -125,3 +125,7 @@ temp/
 !tests/visual/__screenshots__/**/*.png
 blob-report/
 playwright-report.json
+playpress-report/
+playpress-report-quarantine/
+playpress-union/
+site/
