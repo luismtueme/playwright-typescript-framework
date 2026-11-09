@@ -381,8 +381,9 @@ Specs in `tests/visual/` compare screenshots with baselines in `tests/visual/__s
 
 ## Reporting
 
-- **Playwright HTML report** (`html-report/`): every test with its steps, errors, screenshots, videos and traces. Open traces with `npx playwright show-trace <file>.zip`, or at [trace.playwright.dev](https://trace.playwright.dev).
-- **Allure** (`npm run report`): the same, plus trend history and failure categories (Application Bug, Flaky Test, Test Defect, Infrastructure).
+- **Playwright HTML report** (`html-report/`): every test with its steps, errors, screenshots, videos and traces. Open traces with `npx playwright show-trace <file>.zip`, or at [trace.playwright.dev](https://trace.playwright.dev). Sharded CI runs merge blob reports into this HTML report and a JSON report; both include every test (the PR summary counts them).
+- **Allure** (`npm run report`): the same, plus trend history and failure categories (Application Bug, Flaky Test, Test Defect, Infrastructure). CI and nightly still write `allure-results/` on every shard and browser.
+- **Terminal**: `list` locally. When `CI=true` (pull requests, `main`, nightly), the `failures` reporter prints failures and retries as they happen, then a summary.
 
 In CI, the Allure report for every push to `main` is published to GitHub Pages. For PRs, download the `allure-results` and `test-artifacts` artifacts from the run.
 

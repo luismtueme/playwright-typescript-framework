@@ -10,7 +10,9 @@ Playwright's test agents in `.claude/agents/`. Humans: the same rules are in
 - Put browser tests in `tests/ui/`, API tests in `tests/api/`, database checks in `tests/db/`.
 - Use page objects from `pages/`. If a test needs a locator that isn't there, add it to the
   page object (prefer `getByRole`, `getByLabel`, `getByText`), then use it from the test.
-  Keep `expect` out of page objects.
+  Keep `expect` out of page objects. Assign locators in the constructor body. Playwright 1.65
+  compiles class fields with `useDefineForClassFields` (on for this repo's ES2023 target), so
+  `readonly submit = this.page.getByRole(...)` runs before `page` exists and throws.
 - New page? Scaffold it: `npm run new:page -- <Name> --path /<url>` creates the page object,
   a spec and an accessibility check that already pass lint.
 - Tests start logged in as `admin`. For another user: `test.use({ role: 'viewer' })` or
