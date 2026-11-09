@@ -3,11 +3,8 @@
  * the demo app and the scripts.
  * @see https://playwright.dev/docs/test-configuration
  */
-import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/test';
+import { defineConfig, devices, type BrowserContextOptions } from '@playwright/test';
 import { appUrl, config } from './config';
-
-/** Project `use` options. Wider than `devices[name]` so desktop can unset `screen`. */
-type ProjectUse = NonNullable<NonNullable<PlaywrightTestConfig['projects']>[number]['use']>;
 
 // One seed per run, set before workers start so they all inherit it (see utils/testData.ts)
 process.env.TEST_SEED ??= String(Math.floor(Math.random() * 2 ** 31));
@@ -32,29 +29,33 @@ const VISUAL_DEVICES = ['Pixel 7', 'iPhone 15'];
 
 interface Target {
     name: string;
-    use: ProjectUse;
+    use: BrowserContextOptions;
     /** Baselines subfolder; the desktop browser's baselines sit at the root */
     baselines: string;
 }
 
+/**
+ * Playwright 1.64 copies `screen` out of a device descriptor, which changes
+ * `window.screen` and media queries. These baselines were captured without that,
+ * and the suite sets its own viewport, so leave screen emulation off.
+ */
+function useDevice(name: string, extra: { viewport?: { width: number; height: number } } = {}): BrowserContextOptions {
+    const descriptor = devices[name];
+    if (!descriptor) {
+        throw new Error(`Unknown device "${name}". Use a Playwright device name, such as "Pixel 7" or "iPhone 15"`);
+    }
+    return { ...descriptor, ...extra, screen: undefined };
+}
+
 const desktop: Target = {
     name: config.browser,
-    // 1.64+ applies `screen` from the device descriptor (1920x1080 for desktop Chrome).
-    // Desktop runs use the configured viewport, so leave screen unset and keep layout there.
-    // Phone profiles keep the descriptor, including its screen.
-    use: { ...devices[DEVICES[config.browser]], viewport: config.viewport, screen: undefined },
+    use: useDevice(DEVICES[config.browser], { viewport: config.viewport }),
     baselines: '',
 };
 
 /** A Playwright device: viewport, user agent, touch, and the browser it ships with */
 function mobile(name: string): Target {
-    const descriptor = devices[name];
-    if (!descriptor) {
-        throw new Error(
-            `Unknown TEST_DEVICE "${name}". Use a Playwright device name, such as "Pixel 7" or "iPhone 15"`,
-        );
-    }
-    return { name, use: descriptor, baselines: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/` };
+    return { name, use: useDevice(name), baselines: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/` };
 }
 
 // TEST_DEVICE runs the tests on one device; visual runs cover the desktop browser and each phone

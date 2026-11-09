@@ -8,14 +8,16 @@ Tests are plain Playwright specs (`*.spec.ts`). Page objects, API clients, test 
 
 ## Which repo should I use?
 
-This is one of four versions of the same framework. They share the design and the demo app, and the three Playwright versions also share the CI gates.
+This is one of six frameworks.
 
 | Repository | Tests are written as | Language | Choose it when |
 |---|---|---|---|
 | **playwright-typescript-framework** (this one) | Playwright specs | TypeScript | Engineers write and read the tests. The most features and the simplest toolchain |
 | [playwright-cucumber-typescript-framework](https://github.com/luismtueme/playwright-cucumber-typescript-framework) | Gherkin scenarios and Playwright specs | TypeScript | Product owners, analysts or manual QA read or write scenarios in Given/When/Then |
 | [playwright-cucumber-automation-framework](https://github.com/luismtueme/playwright-cucumber-automation-framework) | Gherkin scenarios and Playwright specs | JavaScript (type-checked with JSDoc) | You want Cucumber without a TypeScript toolchain |
+| [playwright-python-framework](https://github.com/luismtueme/playwright-python-framework) | Pytest | Python | The same Playwright checks, without Node |
 | [selenium-java-cucumber-framework](https://github.com/luismtueme/selenium-java-cucumber-framework) | Gherkin scenarios | Java (Selenium WebDriver) | Your team works in Java, or needs Selenium: a Selenium Grid or WebDriver-based tooling |
+| [appium-java-cucumber-framework](https://github.com/luismtueme/appium-java-cucumber-framework) | Gherkin scenarios and JUnit specs | Java (Appium) | Native Android and iOS |
 
 ## What's included
 
@@ -29,7 +31,7 @@ This is one of four versions of the same framework. They share the design and th
 | Generated inputs | Property-based tests (fast-check) state a rule and check it against many generated inputs, including unicode, emoji and edge lengths. They found a real bug in the demo app |
 | Reproducible data | Seeded, realistic test data. A failed test's report shows the seed; `TEST_SEED=...` reproduces it exactly |
 | Performance budgets | Each page's load metrics (navigation timing, LCP, CLS) must stay within `config/performanceBudgets.json`; the measured numbers are attached to every test |
-| Phones | Nightly runs repeat the suite on Pixel 7 and iPhone 15 profiles (viewport, touch, mobile user agent), and visual baselines exist per viewport. A PR test checks every page lays out at phone width |
+| Phones | A PR test checks every page lays out at phone width. Visual baselines exist per viewport |
 | Productivity | `npm run new:page` scaffolds a page object, fixture, spec and accessibility check that pass lint; `npm run codegen` records from a logged-in session; Playwright's AI test agents (planner, generator, healer) are set up to follow this framework's conventions |
 | Fast, trustworthy CI | New and changed tests run 10 times before merging (burn-in); the suite is sharded across machines with one merged report; every PR gets a results summary comment |
 | Database checks | `DbClient` (MySQL, pooled, parameterized). `@db` tests verify what the API wrote; CI runs them against a real MySQL |
@@ -324,6 +326,30 @@ Locator assertions retry on their own. For API or database values, `expect.poll(
 await expect.poll(() => db.count('items', 'id = ?', [item.id])).toBe(0);
 ```
 
+### Playwright 1.65
+
+`@playwright/test` is 1.65. CI prints the `failures` reporter; Allure and the merged HTML and JSON reports still list every test. Locators in page objects are assigned in the constructor, because 1.65 follows `useDefineForClassFields`. The test runner stays on Node.js: Bun's `--only-changed` does not follow imports, and burn-in depends on that. The 1.64 pieces this framework uses:
+
+**A locator inside another locator.** `locator.within()` keeps relative locators (`nth`, `first`) inside each parent, so the third cell of every row is not the third cell of the table:
+
+```typescript
+const thirdColumn = page.getByRole('cell').nth(2).within(page.getByRole('row'));
+await expect(thirdColumn).toHaveText(['Apple', 'Banana', 'Cherry']);
+
+const save = page.getByRole('button', { name: 'Save' });
+await save.within(page.getByRole('dialog')).click();
+```
+
+`tests/ui/library-1-64.spec.ts` covers that, plus `page.getByRef()` (the `e2` ref from `ariaSnapshot({ mode: 'ai' })`), cookies on the API request context (`request.addCookies` / `cookies` / `clearCookies`), and `page.content({ includeShadow: true })`.
+
+**Page tools (WebMCP).** Experimental. Chromium needs `--enable-features=WebMCP`. `tests/ui/webmcp.spec.ts` launches its own browser with that flag, lists the tool the page registers, and calls it. The rest of the suite does not turn the flag on. Firefox and WebKit skip the example.
+
+**Device screen.** 1.64 copies `screen` out of `devices['Desktop Chrome']` and the phone descriptors, which changes `window.screen` and media queries. `playwright.config.ts` sets `screen: undefined` after the spread so the visual baselines stay the ones captured without that emulation. Do not switch `toHaveScreenshot` to WebP; the committed baselines are PNG.
+
+**Video.** `video` can be an object with `mode`, `size`, `fps` (Firefox and WebKit cap at 25), and CSS for the action point, highlight, and title. `fontSize` is deprecated. This framework still takes the string mode from config (`retain-on-failure`). New recordings are VP9.
+
+**Order, projects, and locks.** `testProject.default: false` and `--project=*` fit a config that lists every browser. This one picks the browser with `TEST_BROWSER`, so the projects stay as they are. `--shuffle` and `--shuffle <seed>` randomize order; CI does not use them, so a required run stays in a stable order. `test.describe.configure({ lock: 'name' })` keeps tests that share a resource from running at the same time. Nothing here needs a lock yet.
+
 ### API contract
 
 `contracts/openapi.yaml` describes every endpoint, status and response body, and its response schemas forbid undocumented fields. Two things follow from it:
@@ -399,7 +425,8 @@ In CI, the Allure report for every push to `main` is published to GitHub Pages. 
 | Tests | Merges the shard reports into one HTML report, writes the results summary to the job and as a PR comment (updated on each push), and fails if any shard failed |
 | Visual | Screenshot comparison in the Playwright Docker image. Uploads expected/actual/diff images on failure |
 | Publish Allure Report | On `main` only: builds the report and deploys it to GitHub Pages |
-| Nightly Cross-Browser | Daily at 06:00 UTC (and on demand): everything on Chromium, Firefox and WebKit, and on Pixel 7 and iPhone 15 profiles. Not required to merge |
+
+`.github/workflows/nightly.yml` is a separate workflow. It runs daily at 06:00 UTC and on demand: the suite on Chromium, Firefox, and WebKit. It does not run on pull requests, and it is not required to merge.
 
 `main` is protected: changes need a PR with Checks, Burn-in, Tests and Visual passing. Dependabot opens weekly update PRs. See [.github/GITHUB_ACTIONS_GUIDE.md](.github/GITHUB_ACTIONS_GUIDE.md) for setup in your own repository.
 

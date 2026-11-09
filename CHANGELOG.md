@@ -4,11 +4,16 @@ All notable changes to this project. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+- Playwright 1.64. `locator.within()`, `page.getByRef()`, request-context cookies, and shadow DOM in `page.content()` are covered in `tests/ui/library-1-64.spec.ts`. An experimental WebMCP example launches Chromium with `--enable-features=WebMCP` (`tests/ui/webmcp.spec.ts`) and does not change the rest of the suite.
+- Device projects set `screen: undefined`. Playwright 1.64 forwards `screen` from device descriptors, which would change `window.screen` and the visual baselines.
+
 ### Changed
-- Playwright Test 1.65.0 (lockfile was 1.63.0). The Docker image tag matches (`mcr.microsoft.com/playwright:v1.65.0-noble`, which ships Node.js 26). CI and nightly stay on Node.js 22. Bun can run the test runner, but `--only-changed` does not follow imports there, and burn-in depends on that.
+- Playwright Test 1.65.0. The Docker image tag matches (`mcr.microsoft.com/playwright:v1.65.0-noble`, which ships Node.js 26). CI and nightly stay on Node.js 22. Bun can run the test runner, but `--only-changed` does not follow imports there, and burn-in depends on that.
 - CI and nightly terminal output uses the `failures` reporter. Allure, the blob reports and the merged HTML and JSON reports still include every test, so the PR summary and the missing-shard check stay accurate.
-- Desktop projects ignore the device descriptor's screen size and keep the configured viewport. Phone profiles keep the device screen.
 - Page objects assign locators in the constructor. Playwright 1.65 follows `useDefineForClassFields`, so a field initializer that reads `this.page` throws.
+- README: the repo list includes all six frameworks. Nightly is described as its own workflow, and that workflow runs Chromium, Firefox, and WebKit only.
+- README: the CI section no longer says the suite runs on Pixel 7 and iPhone 15. The pull-request phone check is a phone-width layout test.
 - README: the "Which repo should I use?" table links the new Java and Selenium version, [selenium-java-cucumber-framework](https://github.com/luismtueme/selenium-java-cucumber-framework).
 
 ### Fixed
