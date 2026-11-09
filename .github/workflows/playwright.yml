@@ -63,6 +63,8 @@ jobs:
   # PRs only: the tests affected by this PR's changes (Playwright's --only-changed follows
   # imports, so a change to a page object or fixture selects every test that uses it).
   # They run once for fast feedback, then 10 more times to catch flakiness before merging.
+  # Stay on Node.js. `bunx --bun playwright test` (1.65) does not follow imports for
+  # --only-changed, and its stack traces differ from the ones Allure and the HTML report show.
   burn-in:
     name: Burn-in
     needs: check
@@ -193,7 +195,8 @@ jobs:
       - name: Run Quarantined Tests (non-blocking)
         if: ${{ !cancelled() && matrix.shard == 1 }}
         continue-on-error: true
-        # Not a blob: that would overwrite this shard's blob report
+        # Not a blob: the blob reporter deletes blob-report/ before writing, which would
+        # erase this shard's report. The config also refuses QUARANTINE together with BLOB_REPORT.
         env:
           BLOB_REPORT: false
         run: npm run test:quarantine

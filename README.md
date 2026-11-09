@@ -326,9 +326,9 @@ Locator assertions retry on their own. For API or database values, `expect.poll(
 await expect.poll(() => db.count('items', 'id = ?', [item.id])).toBe(0);
 ```
 
-### Playwright 1.64
+### Playwright 1.65
 
-`@playwright/test` is 1.64. The pieces this framework uses:
+`@playwright/test` is 1.65. CI prints the `failures` reporter; Allure and the merged HTML and JSON reports still list every test. Locators in page objects are assigned in the constructor, because 1.65 follows `useDefineForClassFields`. The test runner stays on Node.js: Bun's `--only-changed` does not follow imports, and burn-in depends on that. The 1.64 pieces this framework uses:
 
 **A locator inside another locator.** `locator.within()` keeps relative locators (`nth`, `first`) inside each parent, so the third cell of every row is not the third cell of the table:
 
@@ -407,8 +407,9 @@ Specs in `tests/visual/` compare screenshots with baselines in `tests/visual/__s
 
 ## Reporting
 
-- **Playwright HTML report** (`html-report/`): every test with its steps, errors, screenshots, videos and traces. Open traces with `npx playwright show-trace <file>.zip`, or at [trace.playwright.dev](https://trace.playwright.dev).
-- **Allure** (`npm run report`): the same, plus trend history and failure categories (Application Bug, Flaky Test, Test Defect, Infrastructure).
+- **Playwright HTML report** (`html-report/`): every test with its steps, errors, screenshots, videos and traces. Open traces with `npx playwright show-trace <file>.zip`, or at [trace.playwright.dev](https://trace.playwright.dev). Sharded CI runs merge blob reports into this HTML report and a JSON report; both include every test (the PR summary counts them).
+- **Allure** (`npm run report`): the same, plus trend history and failure categories (Application Bug, Flaky Test, Test Defect, Infrastructure). CI and nightly still write `allure-results/` on every shard and browser.
+- **Terminal**: `list` locally. When `CI=true` (pull requests, `main`, nightly), the `failures` reporter prints failures and retries as they happen, then a summary.
 
 In CI, the Allure report for every push to `main` is published to GitHub Pages. For PRs, download the `allure-results` and `test-artifacts` artifacts from the run.
 

@@ -32,7 +32,7 @@ Or run everything in Docker, MySQL included: `docker compose run --build --rm te
 
 **Tests**
 - Import `test` and `expect` from `tests/fixtures.ts`, not from `@playwright/test`.
-- Page objects expose locators (prefer `getByRole` and `getByLabel`) and user actions. Assertions live in specs.
+- Page objects expose locators (prefer `getByRole` and `getByLabel`) and user actions. Assertions live in specs. Assign locators in the constructor body: Playwright 1.65 compiles class fields with `useDefineForClassFields` (on for this repo's ES2023 target), so a field initializer that reads `this.page` throws.
 - Tags go in the tag option (`{ tag: '@smoke' }`), never in titles, and must be in the allowlist in `utils/lintTests.ts`. Add new tags there so they're documented.
 - Pick the user with `test.use({ role: 'viewer' })`; don't log in through the UI unless the test is about logging in.
 - No hard-coded waits (`waitForTimeout`) or `networkidle`: Playwright waits automatically, and lint rejects both. Use `expect.poll()` for values that aren't on the page.

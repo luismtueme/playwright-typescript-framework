@@ -16,6 +16,12 @@ if (config.visual && !config.inDocker && !config.allTests) {
     // Fonts and anti-aliasing differ by OS; baselines are only valid from the Docker image
     throw new Error('Visual tests must run in Docker for stable screenshots: npm run test:visual');
 }
+
+if (config.quarantine && config.blobReport) {
+    // The blob reporter deletes blob-report/ before it writes. A quarantine run in the
+    // same job would erase the shard report the merge step needs.
+    throw new Error('QUARANTINE=true cannot be combined with BLOB_REPORT=true: the blob reporter clears blob-report/.');
+}
 const VISUAL_TESTS = /[\\/]visual[\\/]/;
 
 /** Phones the visual tests also check, each with its own baselines */
@@ -71,9 +77,14 @@ export default defineConfig({
         // Docker renders identically every run, so the tolerance can be near zero
         toHaveScreenshot: { maxDiffPixels: 10, animations: 'disabled' },
     },
-    // CI shards write blob reports that the merge job combines into one HTML and JSON report
+    // CI shards write blob reports that the merge job combines into one HTML and JSON report.
+    // Those reports stay complete: Allure, the PR summary and the missing-shard check count
+    // every test, so `onlyFailures` is not set on the blob, HTML or JSON reporters.
+    // In CI the terminal reporter is `failures` (failures and retries as they happen, then a
+    // summary). Locally, `list` shows progress. The runner stays on Node.js: Bun does not
+    // follow imports for `--only-changed`, which burn-in depends on.
     reporter: [
-        ['list'],
+        [config.isCI ? 'failures' : 'list'],
         ['allure-playwright'],
         config.blobReport
             ? ['blob', { outputDir: 'blob-report' }]
